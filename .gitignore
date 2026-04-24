@@ -1,0 +1,21 @@
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Env — never commit secrets
+.env
+.env.local
+.env.*.local
+
+# Session logs from demo runs (contain real signatures, keep local)
+logs/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Transformers.js CLIP model cache (when image oracle is built)
+.cache/
