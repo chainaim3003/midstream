@@ -1,326 +1,307 @@
 // client/buyer.ts
 //
-// The headless buyer. Streams tokens from the seller, runs a local Gemini 3
-// Flash quality judge on each chunk, decides whether to sign the next
-// authorization or let the stream time out (kill).
+// The Midstream buyer. One class, one public method: runSession(args).
 //
-// This file is a skeleton. Method names from the Circle SDK (BatchEvmScheme,
-// CompositeEvmScheme, GatewayClient) are taken from Circle's docs; verify the
-// exact signatures against a fresh clone of circlefin/arc-nanopayments.
+// For each chunk in the session:
+//   1. If next chunk would exceed budget → emit budget-exhausted, stop.
+//   2. Call POST /chunk/{useCase} via GatewayClient.pay — SDK signs the
+//      EIP-712 authorization and retries with PAYMENT-SIGNATURE automatically.
+//   3. Append returned text to cumulative output.
+//   4. Run the quality monitor on the cumulative output.
+//   5. Feed the new QualityReport into kill-gate.
+//   6. If kill → emit kill-decision, stop.
+//   7. If Claude says stop_reason=end_turn → natural stop.
+//   8. Otherwise → next chunk.
 //
-// Official references:
-//   https://developers.circle.com/gateway/nanopayments/howtos/x402-buyer
-//   https://developers.circle.com/gateway/nanopayments/howtos/eip-3009-signing
-//   https://github.com/circlefin/arc-nanopayments/ (see agent.mts, lib/*)
+// The buyer is a library, not a process. Callers (scripts/run-demo.ts today,
+// web-server later) create a Buyer + a SessionBus, call runSession, and
+// subscribe to the bus for live events. The bus supports replay so a UI can
+// attach mid-session without missing earlier events.
 
-import express, { type Response } from 'express';
-import { privateKeyToAccount } from 'viem/accounts';
-import { createPublicClient, http } from 'viem';
-import { env, chain, arcTxUrl } from '../shared/config.js';
-import type { BuyerEvent, QualityReport } from '../shared/events.js';
-import { assessChunk, makeMonitorState, updateRolling, shouldKill } from './quality-monitor.js';
+import { GatewayClient } from "@circle-fin/x402-batching/client";
+import type {
+  QualityMonitor,
+  QualityContext,
+  SessionOptions,
+  SessionResult,
+} from "../shared/types.js";
+import type { QualityReport } from "../shared/events.js";
+import { SessionBus } from "../shared/session-bus.js";
+import { evaluateKillGate } from "./kill-gate.js";
 
-// TODO[verify]: exact imports from @circle-fin/x402-batching/client
-import { BatchEvmScheme, GatewayClient } from '@circle-fin/x402-batching/client';
-
-// ---------------------------------------------------------------------------
-// Event bus for the web UI
-// ---------------------------------------------------------------------------
-
-const app = express();
-app.use(express.json());
-const sseClients = new Set<Response>();
-
-function emit(event: BuyerEvent) {
-  const line = `data: ${JSON.stringify(event)}\n\n`;
-  for (const client of sseClients) client.write(line);
+export interface BuyerDeps {
+  privateKey: `0x${string}`;
+  monitor: QualityMonitor;
 }
 
-app.get('/events', (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-  sseClients.add(res);
-  req.on('close', () => sseClients.delete(res));
-});
+export interface RunSessionArgs extends SessionOptions {
+  sessionId: string;
+  bus: SessionBus;
+}
 
-// ---------------------------------------------------------------------------
-// Buyer account + clients
-// ---------------------------------------------------------------------------
+interface ChunkResponse {
+  text: string;
+  tokensGenerated: number;
+  finishReason: string;
+}
 
-const account = privateKeyToAccount(env.BUYER_PRIVATE_KEY as `0x${string}`);
+export class Buyer {
+  private readonly client: GatewayClient;
+  private readonly monitor: QualityMonitor;
 
-const publicClient = createPublicClient({
-  chain: {
-    id: chain.id,
-    name: chain.name,
-    nativeCurrency: chain.nativeCurrency,
-    rpcUrls: { default: { http: [chain.rpcUrl] } },
-  },
-  transport: http(chain.rpcUrl),
-});
-
-// TODO[verify]: constructor options.
-const gateway = new GatewayClient({
-  chain: chain.id,
-  // account / apiKey / etc. per SDK
-});
-
-const scheme = new BatchEvmScheme({
-  account,
-  chain: chain.id,
-  // NOTE: verifyingContract is NOT hardcoded here — it comes from the 402
-  // response's `extra.verifyingContract` field at runtime. See lib/signer.ts.
-});
-
-// ---------------------------------------------------------------------------
-// The main run loop
-// ---------------------------------------------------------------------------
-
-app.post('/run', async (req, res) => {
-  const { prompt, budgetUsdc, qualityThreshold, maxTokens } = req.body ?? {};
-  if (!prompt) return res.status(400).json({ error: 'prompt required' });
-
-  const budget = Math.min(Number(budgetUsdc ?? 0.5), env.BUYER_MAX_SPEND_USDC);
-  const threshold = Number(qualityThreshold ?? env.QUALITY_THRESHOLD);
-
-  res.json({ started: true });
-
-  try {
-    await runSession({ prompt, budget, threshold, maxTokens: Number(maxTokens ?? 1000) });
-  } catch (e) {
-    console.error('session error:', e);
-  }
-});
-
-async function runSession({
-  prompt,
-  budget,
-  threshold,
-  maxTokens,
-}: {
-  prompt: string;
-  budget: number;
-  threshold: number;
-  maxTokens: number;
-}) {
-  const sessionId = crypto.randomUUID();
-  const monitor = makeMonitorState({ query: prompt, threshold, windowSize: env.ROLLING_WINDOW_SIZE });
-
-  // Initial Gateway balance
-  // TODO[verify]: exact method — might be `gateway.getBalance({ address })` or similar.
-  const balance = await gateway.getBalance({ address: account.address });
-  emit({ type: 'buyer-ready', address: account.address, gatewayBalanceUsdc: Number(balance) / 1e6, ts: Date.now() });
-
-  // Start the stream
-  const sellerUrl = `http://localhost:${env.PORT}/stream`;
-  const initial = await fetch(sellerUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, maxTokens }),
-  });
-
-  if (initial.status !== 402) {
-    throw new Error(`expected 402 payment required, got ${initial.status}`);
+  constructor(deps: BuyerDeps) {
+    this.client = new GatewayClient({
+      chain: "arcTestnet",
+      privateKey: deps.privateKey,
+    });
+    this.monitor = deps.monitor;
   }
 
-  // Parse the payment challenge, sign chunk 1, retry
-  const challenge = decodePaymentRequired(initial.headers.get('PAYMENT-REQUIRED') ?? '');
-  const firstAuth = await scheme.sign({
-    challenge,
-    amountUsdc: env.PRICE_PER_CHUNK_USDC,
-    nonceBytes: randomNonce(),
-    validBefore: BigInt(Math.floor(Date.now() / 1000) + 4 * 24 * 3600), // 4 days — must be ≥ 3 days per Gateway rules
-  });
-
-  emit({
-    type: 'authorization-signed',
-    sessionId,
-    chunkIndex: 0,
-    nonce: firstAuth.authorization.nonce,
-    sig: firstAuth.signature,
-    priceUsdc: env.PRICE_PER_CHUNK_USDC,
-    ts: Date.now(),
-  });
-
-  // Retry with PAYMENT-SIGNATURE
-  const streamResp = await fetch(sellerUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'PAYMENT-SIGNATURE': encodePaymentSignature(firstAuth, challenge),
-    },
-    body: JSON.stringify({ prompt, maxTokens }),
-  });
-
-  if (!streamResp.ok || !streamResp.body) {
-    throw new Error(`stream open failed: ${streamResp.status}`);
+  get address(): `0x${string}` {
+    return this.client.address as `0x${string}`;
   }
 
-  // Consume SSE, chunk by chunk
-  const reader = streamResp.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let currentChunkText = '';
-  let currentChunkIndex = 0;
-  let spent = env.PRICE_PER_CHUNK_USDC;
+  /**
+   * Ensure Gateway balance is sufficient before starting sessions. If the
+   * current available Gateway balance is < 1 USDC, top up by `topUpUsdc`.
+   * Returns null when the existing balance is already enough.
+   */
+  async ensureDeposit(topUpUsdc = "5"): Promise<{ depositTxHash: string } | null> {
+    const balances = await this.client.getBalances();
+    // 1 USDC = 1_000_000 atomic.
+    if (balances.gateway.available < 1_000_000n) {
+      return this.client.deposit(topUpUsdc);
+    }
+    return null;
+  }
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  async runSession(args: RunSessionArgs): Promise<SessionResult> {
+    const {
+      sessionId,
+      bus,
+      useCase,
+      prompt,
+      sellerBaseUrl,
+      budgetUsdc,
+      qualityThreshold,
+      rollingWindow,
+      warmupChunks,
+      chunkPriceUsdc,
+      chunkSizeTokens,
+      maxTokens,
+    } = args;
 
-    // Parse SSE events (event: X\ndata: {...}\n\n)
-    const events = extractSseEvents(buffer);
-    buffer = events.remainder;
+    // All quantities used in the finalizer are declared up top so no early
+    // return can hit a TDZ. A previous version used `const` + a hoisted
+    // `buildResult()` function; if the inner catch returned, that reference
+    // threw "Cannot access 'elapsedMs' before initialization" which got
+    // swallowed by the outer catch and caused a ghost second session-complete
+    // event. Keep them all up here.
+    const startTime = Date.now();
+    const maxChunks = Math.ceil(maxTokens / chunkSizeTokens);
+    const wouldHaveSpentUsdc = maxChunks * chunkPriceUsdc;
 
-    for (const evt of events.events) {
-      if (evt.event === 'token') {
-        const data = JSON.parse(evt.data) as { text: string; chunkIndex: number };
-        currentChunkText += data.text;
-        currentChunkIndex = data.chunkIndex;
-      } else if (evt.event === 'payment-required') {
-        const data = JSON.parse(evt.data) as { chunkIndex: number; price: number };
+    const qualityHistory: QualityReport[] = [];
+    const transactions: string[] = [];
+    let cumulativeText = "";
+    let chunksCompleted = 0;
+    let tokensReceived = 0;
+    let spent = 0;
+    let outcome: SessionResult["outcome"] = "completed";
+    let killReason: string | undefined;
+    let errorMessage: string | undefined;
 
-        // --- QUALITY ASSESSMENT ---
-        const report: QualityReport = await assessChunk({
-          query: prompt,
-          windowText: currentChunkText,
-          chunkIndex: currentChunkIndex,
-        });
-        const rollingAvg = updateRolling(monitor, report);
-        emit({
-          type: 'quality-assessed',
+    const route = routeFor(useCase);
+    const url = sellerBaseUrl.replace(/\/$/, "") + route;
+
+    bus.publish({
+      type: "session-started",
+      useCase,
+      prompt,
+      budgetUsdc,
+      qualityThreshold,
+      chunkSizeTokens,
+      maxTokens,
+      buyerAddress: this.address,
+      sellerBaseUrl,
+    });
+
+    // Single try/catch wraps the whole chunk loop. Any error inside — in
+    // .pay(), the quality monitor, etc. — ends the session as `outcome=error`.
+    try {
+      for (let chunkIndex = 0; chunkIndex < maxChunks; chunkIndex++) {
+        // Rule: budget check before each paid chunk.
+        if (spent + chunkPriceUsdc > budgetUsdc + 1e-9) {
+          outcome = "budget";
+          bus.publish({
+            type: "budget-exhausted",
+            chunkIndex,
+            spentUsdc: spent,
+            budgetUsdc,
+          });
+          break;
+        }
+
+        bus.publish({ type: "chunk-started", chunkIndex });
+
+        // --- Pay for + receive the chunk ---------------------------------
+        // GatewayClient.pay() does: initial request → receive 402 → sign
+        // EIP-712 authorization → retry with PAYMENT-SIGNATURE → return data.
+        const body = JSON.stringify({
           sessionId,
-          chunkIndex: currentChunkIndex,
+          prompt,
+          textSoFar: cumulativeText,
+          chunkIndex,
+          maxTokens: chunkSizeTokens,
+        });
+
+        const payResult = await this.client.pay<ChunkResponse>(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        });
+
+        const chunk = payResult.data;
+        const transaction = payResult.transaction;
+
+        cumulativeText += chunk.text;
+        tokensReceived += chunk.tokensGenerated;
+        spent += chunkPriceUsdc;
+        chunksCompleted++;
+        if (transaction) transactions.push(transaction);
+
+        if (chunk.text.length > 0) {
+          bus.publish({ type: "tokens", chunkIndex, text: chunk.text });
+        }
+        bus.publish({
+          type: "chunk-complete",
+          chunkIndex,
+          tokenCount: chunk.tokensGenerated,
+          priceUsdc: chunkPriceUsdc,
+          transaction,
+        });
+
+        const naturalStop =
+          chunk.finishReason === "end_turn" ||
+          chunk.finishReason === "stop_sequence";
+
+        // --- Quality assessment -----------------------------------------
+        const ctx: QualityContext = {
+          sessionId,
+          prompt,
+          chunkIndex,
+          cumulative: buildCumulative(useCase, cumulativeText),
+        };
+
+        const report = await this.monitor.assess(ctx);
+        qualityHistory.push(report);
+
+        const recent = qualityHistory.slice(-rollingWindow);
+        const rollingAvg =
+          recent.reduce((s, r) => s + r.score, 0) / recent.length;
+
+        bus.publish({
+          type: "quality-assessed",
+          chunkIndex,
           report,
           rollingAvg,
-          ts: Date.now(),
+          threshold: qualityThreshold,
+          monitorName: this.monitor.name,
         });
 
-        // --- KILL GATE ---
-        const gate = shouldKill(monitor);
-        if (gate.kill) {
-          emit({
-            type: 'kill-decision',
-            sessionId,
-            chunkIndex: data.chunkIndex,
-            reason: gate.reason,
-            rollingAvg,
-            threshold,
-            ts: Date.now(),
-          });
-          // Don't POST to /authorize — seller will time out and abort
-          break;
-        }
+        // --- Kill gate ---------------------------------------------------
+        const decision = evaluateKillGate(qualityHistory, {
+          threshold: qualityThreshold,
+          warmup: warmupChunks,
+          rollingWindow,
+        });
 
-        // --- BUDGET GATE ---
-        if (spent + data.price > budget) {
-          emit({
-            type: 'budget-exhausted',
-            sessionId,
-            chunkIndex: data.chunkIndex,
+        if (decision.kill) {
+          outcome = "killed";
+          killReason = decision.reason;
+          bus.publish({
+            type: "kill-decision",
+            chunkIndex,
+            reason: decision.reason,
+            rollingAvg: decision.rollingAvg,
+            threshold: qualityThreshold,
             spentUsdc: spent,
-            budgetUsdc: budget,
-            ts: Date.now(),
           });
           break;
         }
 
-        // --- SIGN NEXT AUTHORIZATION ---
-        const nextAuth = await scheme.sign({
-          challenge,
-          amountUsdc: data.price,
-          nonceBytes: randomNonce(),
-          validBefore: BigInt(Math.floor(Date.now() / 1000) + 4 * 24 * 3600),
-        });
+        if (naturalStop) {
+          outcome = "completed";
+          break;
+        }
 
-        emit({
-          type: 'authorization-signed',
-          sessionId,
-          chunkIndex: data.chunkIndex,
-          nonce: nextAuth.authorization.nonce,
-          sig: nextAuth.signature,
-          priceUsdc: data.price,
-          ts: Date.now(),
-        });
-
-        // POST it to the seller's /authorize side-channel
-        await fetch(`http://localhost:${env.PORT}/authorize`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId, chunkIndex: data.chunkIndex, payload: nextAuth }),
-        });
-
-        spent += data.price;
-        currentChunkText = '';
-      } else if (evt.event === 'aborted' || evt.event === 'completed') {
-        break;
+        if (tokensReceived >= maxTokens) {
+          outcome = "completed";
+          break;
+        }
       }
+    } catch (err) {
+      outcome = "error";
+      errorMessage = err instanceof Error ? err.message : String(err);
     }
+
+    const elapsedMs = Date.now() - startTime;
+
+    bus.publish({
+      type: "session-complete",
+      outcome,
+      chunksCompleted,
+      tokensReceived,
+      spentUsdc: spent,
+      wouldHaveSpentUsdc,
+      elapsedMs,
+      killReason,
+      errorMessage,
+    });
+
+    return {
+      sessionId,
+      outcome,
+      chunksCompleted,
+      tokensReceived,
+      spentUsdc: spent,
+      wouldHaveSpentUsdc,
+      elapsedMs,
+      killReason,
+      errorMessage,
+      output: cumulativeText,
+      transactions,
+    };
   }
-
-  const outcome = monitor.history.length > 0 && shouldKill(monitor).kill ? 'killed' : 'completed';
-  const wouldHaveSpent = Math.ceil(maxTokens / env.CHUNK_SIZE_TOKENS) * env.PRICE_PER_CHUNK_USDC;
-
-  emit({
-    type: 'session-complete',
-    sessionId,
-    outcome,
-    spentUsdc: spent,
-    wouldHaveSpentUsdc: wouldHaveSpent,
-    ts: Date.now(),
-  });
 }
 
 // ---------------------------------------------------------------------------
-// Helpers (shape TBD — see circlefin/arc-nanopayments for exact implementations)
+// Helpers
 // ---------------------------------------------------------------------------
 
-function decodePaymentRequired(header: string) {
-  // TODO: base64 → JSON per x402 spec
-  const json = Buffer.from(header, 'base64').toString('utf-8');
-  return JSON.parse(json);
-}
-
-function encodePaymentSignature(auth: unknown, challenge: unknown): string {
-  // TODO: base64( JSON({ x402Version, scheme, network, payload, resource, accepted }) ) per x402 spec
-  const json = JSON.stringify({ x402Version: 2, payload: auth });
-  return Buffer.from(json).toString('base64');
-}
-
-function randomNonce(): `0x${string}` {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return ('0x' + Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('')) as `0x${string}`;
-}
-
-function extractSseEvents(buf: string): { events: { event: string; data: string }[]; remainder: string } {
-  const events: { event: string; data: string }[] = [];
-  const blocks = buf.split('\n\n');
-  const remainder = blocks.pop() ?? '';
-  for (const block of blocks) {
-    const lines = block.split('\n');
-    let event = 'message';
-    let data = '';
-    for (const line of lines) {
-      if (line.startsWith('event: ')) event = line.slice(7).trim();
-      else if (line.startsWith('data: ')) data += line.slice(6);
-    }
-    if (data) events.push({ event, data });
+function routeFor(useCase: SessionOptions["useCase"]): string {
+  switch (useCase) {
+    case "text":
+      return "/chunk/text";
+    case "code":
+      return "/chunk/code";
+    case "image":
+      return "/chunk/image";
   }
-  return { events, remainder };
 }
 
-// ---------------------------------------------------------------------------
-// Start
-// ---------------------------------------------------------------------------
-
-const PORT = 3001;
-app.listen(PORT, () => {
-  console.log(`🔵 Buyer listening on :${PORT}`);
-  console.log(`   buyer address:      ${account.address}`);
-  console.log(`   quality threshold:  ${env.QUALITY_THRESHOLD}`);
-  console.log(`   rolling window:     ${env.ROLLING_WINDOW_SIZE} chunks`);
-  console.log(`   explorer (seller):  ${arcTxUrl('0x...')}`.replace('0x...', '<latest-batch>'));
-});
+function buildCumulative(
+  useCase: SessionOptions["useCase"],
+  text: string,
+): QualityContext["cumulative"] {
+  switch (useCase) {
+    case "text":
+      return { kind: "text", text };
+    case "code":
+      return { kind: "code", code: text, language: "typescript" };
+    case "image":
+      throw new Error(
+        "image use case not implemented yet (Option C extension)",
+      );
+  }
+}

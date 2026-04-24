@@ -94,8 +94,9 @@ export const env = {
   sellerAddress: hexOpt("SELLER_ADDRESS"),
 
   // LLM providers
+  // Model IDs change over time; check docs.anthropic.com if default stops working.
   anthropicApiKey: opt("ANTHROPIC_API_KEY"),
-  anthropicModel: opt("ANTHROPIC_MODEL") ?? "claude-3-5-haiku-20241022",
+  anthropicModel: opt("ANTHROPIC_MODEL") ?? "claude-haiku-4-5-20251001",
   geminiApiKey: opt("GEMINI_API_KEY"),
   geminiModel: opt("GEMINI_MODEL") ?? "gemini-2.5-flash",
 
