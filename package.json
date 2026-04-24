@@ -1,8 +1,8 @@
 {
-  "name": "agentic-economy-refined",
+  "name": "midstream",
   "version": "0.1.0",
   "private": true,
-  "description": "Quality-gated streaming inference with Circle Gateway Nanopayments on Arc (x402). No mocks.",
+  "description": "Midstream — pay for outcomes, not tokens. Quality-gated streaming inference with Circle Gateway Nanopayments on Arc (x402). No mocks.",
   "type": "module",
   "scripts": {
     "build": "tsc",
