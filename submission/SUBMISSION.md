@@ -9,11 +9,13 @@
 
 ## What Midstream is
 
-Midstream is a working reference implementation of **quality-gated streaming LLM inference with mid-session cutoff**, settled per chunk via Circle Gateway Nanopayments on Arc.
+Midstream is a working reference implementation of **quality-gated streaming LLM inference with mid-stream cutoff**, settled per chunk via Circle Gateway Nanopayments on Arc. The cutoff mechanism is a **live inference harness** — three concurrent observers, two powered by Google Gemini and one a deterministic regex check — that score each 32-token chunk against the prompt's intent and constraints, and **course-correct by refusing the next payment authorization** the moment trajectory diverges. This is harness engineering done *during* generation, not pre-flight (prompt design) or post-hoc (response evaluation).
 
-The seller streams output 32 tokens at a time. Each 32-token chunk is its own paid HTTP request, priced at $0.0005 USDC. Between chunks, the buyer's local quality oracle scores the cumulative output. If the rolling score drops below threshold — topic drift, broken compilation, off-prompt image — the buyer stops signing payment authorizations. The seller, getting no signature, stops generating. Mid-sentence. The buyer pays only for the prefix that passed quality.
+The seller streams output 32 tokens at a time. Each 32-token chunk is its own paid HTTP request, priced at $0.0005 USDC. Between chunks, the buyer's local harness runs three concurrent observers on the cumulative output: Layer 1 (Gemini judge for topic drift), Layer 2 (Gemini judge for spec adherence), Layer 3 (deterministic regex — backticked prompt tokens must appear verbatim). If the rolling score drops below threshold, the buyer stops signing payment authorizations. The seller, getting no signature, stops generating. Mid-sentence. The buyer pays only for the prefix that passed quality.
 
 This is not possible without sub-cent settlement. Stripe's $0.30 minimum makes it impossible. Ethereum L1 gas makes it impossible. Circle Nanopayments on Arc — gas-free, batched, ~0.5 second finality — is the first rail where it works.
+
+The harness itself is only economically viable because Circle Nanopayments + Arc make per-chunk evaluation cheap: each Gemini judge call runs ~$0.0001, the chunk price is $0.0005, harness cost stays well below value moved. On any rail with $0.01+ per-action overhead, harness cost would exceed chunk value before scoring returned — making real-time course correction structurally unavailable. **The harness exists because of Circle and Arc, not just on top of them.**
 
 ---
 
@@ -90,7 +92,7 @@ Per Circle's own docs: *"Send as little as $0.000001 USDC per payment. Batched s
 - A published `@circle-fin/agent-tools` with LLM Function Calling tool schemas
 - Python SDK parity for the batching facilitator
 - A reference A2A/AP2 example
-- Documentation that explicitly endorses "buyer-side oracle" patterns (the generalization Midstream demonstrates)
+- Documentation that explicitly endorses "buyer-side oracle" / "live inference harness" patterns (the generalization Midstream demonstrates)
 
 ### 5. Public GitHub repo
 
@@ -105,15 +107,15 @@ npm run demo         # terminal B — runs 4 sessions
 npm run verify-onchain
 ```
 
-End-to-end deterministic. No mocks. The demo includes one drift session that demonstrates mid-session cutoff (kills around chunk 13–18) and one happy-path session that runs to completion.
+End-to-end deterministic. No mocks. The demo includes one drift session that demonstrates mid-stream cutoff (the harness performs a stop & correct around chunk 13–18) and one happy-path session that runs to completion.
 
-A web dashboard (`npm run web`, served at `:3001`) shows live tokens streaming, per-chunk quality scores, the kill moment, and a transfer-resolution panel that calls `getTransferById` and links to Arc explorer.
+A web dashboard (`npm run web`, served at `:3001`) shows live tokens streaming, the live inference harness scoring each chunk in real time, the stop & correct moment when the harness refuses the next authorization, and a transfer-resolution panel that calls `getTransferById` and links to Arc explorer.
 
 ### 7. Transaction flow video
 
 ✅ See `submission/VIDEO.md` for the script and `submission/screencast.mp4` (link before submitting).
 
-The video shows: faucet drop on arcscan → deposit on arcscan → live demo with tokens streaming → Gemini quality assessment → kill moment → `verify-onchain` output with real 0x hashes → click-through to arcscan showing the batch settlement.
+The video shows: faucet drop on arcscan → deposit on arcscan → live demo with tokens streaming → Gemini quality assessment → stop & correct moment → `verify-onchain` output with real 0x hashes → click-through to arcscan showing the batch settlement.
 
 ---
 
@@ -153,17 +155,17 @@ The pay-per-chunk pattern with mid-stream cutoff is structurally different from 
 
 Most other approaches to "is this agent trustworthy" rely on **selection based on previous history** — reputation scores, capability badges, prior on-chain behavior. These are signals derived from *other people's* needs and experiences, possibly in entirely different domains. A high reputation tells you the agent has performed well for someone else, on something else. It does **not** guarantee it will work for *your* prompt, on *your* task, right now. Reputation also updates after the fact, so the next buyer benefits from your loss; you still paid for the bad run.
 
-Midstream's mid-stream cutoff is **observed quality of the actual generation in front of you**, evaluated against *your* prompt, by *your* oracle, at the only moment when withholding payment is still possible — between chunks. Selection and reputation are useful primitives in their own right, but neither protects a buyer once generation has started. Midstream does.
+Midstream's mid-stream cutoff is **observed quality of the actual generation in front of you**, evaluated against *your* prompt, by *your* harness, at the only moment when withholding payment is still possible — between chunks. This is **harness engineering done during generation**: not pre-flight (prompt design), not post-hoc (response evaluation, retry, reputation update), but mid-flight course correction. Selection and reputation are useful primitives in their own right, but neither protects a buyer once generation has started. Midstream does.
 
 ---
 
 ## What's next (post-hackathon)
 
-The same payment + oracle architecture maps to:
+The same payment + harness architecture maps to:
 
-- **Code generation** with `tsc` + `node --test` as a deterministic oracle (already implemented in `client/quality/code-monitor.ts`).
-- **Image batches** with CLIP similarity as a semi-deterministic oracle.
-- **Streaming voice agents** with ASR confidence + intent classification as the oracle.
-- **Browser agents** with DOM-diff after each action as the oracle.
+- **Code generation** with `tsc` + `node --test` as the deterministic harness (already implemented in `client/quality/code-monitor.ts`).
+- **Image batches** with CLIP similarity as a semi-deterministic harness.
+- **Streaming voice agents** with ASR confidence + intent classification as the harness.
+- **Browser agents** with DOM-diff after each action as the harness.
 
-For each, the payment layer is identical — one EIP-712 authorization per paid unit, batched on-chain via Gateway. The oracle is where the use-case knowledge lives. This is the generalization Circle's Nanopayments product enables: not "cheap payments" but a **pricing primitive** for buyer-defined quality.
+For each, the payment layer is identical — one EIP-712 authorization per paid unit, batched on-chain via Gateway. The harness is where the use-case knowledge lives. This is the generalization Circle's Nanopayments product enables: not "cheap payments" but a **pricing primitive for buyer-defined, real-time-observed quality** — with course correction in the loop.

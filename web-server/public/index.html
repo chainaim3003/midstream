@@ -412,6 +412,308 @@
         color: #1e3a8a;
       }
       .info-note-lead strong { color: #0f172a; }
+      .info-note-lead p { margin: 0 0 8px 0; }
+      .info-note-lead p:last-child { margin-bottom: 0; }
+
+      /* ---- Rail comparison card: "why Circle/Arc is the only viable rail" ---- */
+      table.rail-comparison {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        margin-bottom: 12px;
+      }
+      table.rail-comparison th, table.rail-comparison td {
+        padding: 9px 12px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+      }
+      table.rail-comparison th {
+        font-weight: 500; font-size: 11px;
+        text-transform: uppercase; letter-spacing: 0.05em;
+        color: var(--text-muted);
+      }
+      table.rail-comparison td.num {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+      table.rail-comparison tr.rail-bad  td { color: var(--bad); }
+      table.rail-comparison tr.rail-meh  td { color: var(--warn); }
+      table.rail-comparison tr.rail-good td { color: var(--ok); }
+      table.rail-comparison tr.rail-good { background: var(--ok-bg); }
+      .rail-subscription-note {
+        font-size: 12px; color: var(--text); line-height: 1.55;
+        background: var(--bg-subtle); border-left: 3px solid var(--info);
+        padding: 8px 12px; border-radius: 4px; margin-top: 8px;
+      }
+      .rail-source-note {
+        font-size: 11px; color: var(--text-muted);
+        margin-top: 8px; line-height: 1.55;
+      }
+      .rail-source-note code {
+        font-family: var(--mono); background: var(--bg-subtle);
+        padding: 1px 4px; border-radius: 3px;
+      }
+      .rail-source-note a { color: var(--info); }
+
+      /* Apply the same green proof-accent to the rail comparison card */
+      section.card#rail-comparison-section { border-top: 3px solid #10b981; }
+
+      /* ---- Two-layer architecture explainer (Arc + Circle Gateway) ---- */
+      .layer-explainer {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        margin-bottom: 16px;
+      }
+      @media (max-width: 760px) { .layer-explainer { grid-template-columns: 1fr; } }
+      .layer-col {
+        background: var(--bg-subtle);
+        border-left: 3px solid var(--ok);
+        border-radius: 4px;
+        padding: 10px 14px;
+      }
+      .layer-col h4 {
+        margin: 0 0 4px;
+        font-size: 11px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.06em;
+        color: #047857;
+      }
+      .layer-col p {
+        margin: 0 0 6px;
+        font-size: 12px; color: var(--text); line-height: 1.5;
+      }
+      .layer-col ul {
+        margin: 0; padding-left: 18px;
+        font-size: 12px; line-height: 1.55;
+      }
+      .layer-col li { margin-bottom: 3px; }
+      .layer-conclusion {
+        font-size: 12px; color: var(--text);
+        background: var(--ok-bg);
+        padding: 8px 12px;
+        border-radius: 4px;
+        margin-bottom: 12px;
+        line-height: 1.55;
+      }
+
+      /* ---- Inline SVG icons (no external dependencies) ----
+         Geometry follows Lucide (https://lucide.dev) which is MIT-licensed
+         and embedded inline. currentColor inheritance lets the icons pick up
+         link / button text colors automatically. */
+      .icon-svg {
+        display: inline-block;
+        flex-shrink: 0;
+        vertical-align: -2px;
+      }
+
+      /* Subtle utility button — for refresh, re-check, and other ad-hoc
+         actions that are not the primary CTA. Lighter than `.primary`. */
+      button.icon-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text-muted);
+        padding: 5px 10px;
+        font-size: 12px;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+      }
+      button.icon-btn:hover {
+        border-color: var(--border-strong);
+        color: var(--text);
+        background: var(--bg-subtle);
+      }
+      button.icon-btn:disabled {
+        color: var(--text-faint);
+        cursor: not-allowed;
+        border-color: var(--border);
+        background: transparent;
+      }
+      button.icon-btn .icon-svg { width: 13px; height: 13px; }
+      button.icon-btn .icon-svg.spinning { animation: icon-spin 0.7s linear infinite; }
+      @keyframes icon-spin { to { transform: rotate(360deg); } }
+
+      /* Primary button now flexes so an inline icon can sit alongside text */
+      button.primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      button.primary .icon-svg { width: 13px; height: 13px; }
+
+      /* External-link arrows replace the old "→" character on .explorer-link */
+      .explorer-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .explorer-link .icon-svg { width: 12px; height: 12px; }
+
+      /* Same treatment for the dynamic "View seller's incoming USDC on Arc"
+         link generated inside the Resolve detail panel */
+      .resolve-arc-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--info);
+        font-weight: 500;
+        text-decoration: none;
+        margin-top: 6px;
+      }
+      .resolve-arc-link:hover { text-decoration: underline; }
+      .resolve-arc-link .icon-svg { width: 12px; height: 12px; }
+
+      /* ---- Live harness numbers callout (in the info-note) ----
+         Populated dynamically from /api/status by refreshStatus(). Shows
+         actual Gemini spend / paid-chunk count / cost ratio so the harness
+         economics claim above is verifiable on screen, not just asserted. */
+      .harness-live-callout {
+        font-size: 11.5px;
+        color: var(--text);
+        background: var(--ok-bg);
+        border-left: 3px solid var(--ok);
+        padding: 8px 12px;
+        border-radius: 4px;
+        margin-bottom: 14px;
+        line-height: 1.55;
+      }
+      .harness-live-callout .label {
+        display: inline-block;
+        font-weight: 700;
+        color: #047857;
+        text-transform: uppercase;
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        margin-right: 6px;
+      }
+      .harness-live-callout strong {
+        color: #064e3b;
+        font-family: var(--mono);
+      }
+
+      /* ---- Disclosure for "how it works under the hood" reference content ----
+         Operational details (UUIDs, batches, on-chain proof verification)
+         live behind a click rather than always-on screen. Keeps the dashboard
+         focused on the argument; the technical reference is still one click
+         away for any judge who wants to verify. */
+      details.info-note-details {
+        margin-top: 4px;
+        padding-top: 12px;
+        border-top: 1px dashed rgba(147, 197, 253, 0.5);
+      }
+      details.info-note-details > summary {
+        cursor: pointer;
+        font-size: 12px;
+        color: var(--info);
+        font-weight: 500;
+        list-style: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        user-select: none;
+      }
+      details.info-note-details > summary::-webkit-details-marker { display: none; }
+      details.info-note-details > summary::before {
+        content: "▸";
+        display: inline-block;
+        transition: transform 0.2s ease;
+        font-size: 10px;
+        color: var(--info);
+      }
+      details.info-note-details[open] > summary::before { transform: rotate(90deg); }
+      details.info-note-details > summary:hover { text-decoration: underline; }
+      details.info-note-details > summary .muted {
+        color: var(--text-muted);
+        font-weight: 400;
+        text-transform: none;
+        letter-spacing: normal;
+      }
+      details.info-note-details > .info-note-grid {
+        margin-top: 14px;
+      }
+
+      /* ---- Outer disclosure for the whole framing section ----
+         The four-paragraph framing + Live harness callout + the inner
+         "How it works" sub-disclosure all live behind this single click.
+         Keeps the dashboard action-ready on first load while making the
+         full argument one click away. Slightly more prominent than the
+         inner disclosure (13px vs 12px) so judges notice it. */
+      details.info-note-outer-details > summary {
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--info);
+        font-weight: 500;
+        list-style: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        user-select: none;
+        padding: 4px 0;
+      }
+      details.info-note-outer-details > summary::-webkit-details-marker { display: none; }
+      details.info-note-outer-details > summary::before {
+        content: "▸";
+        display: inline-block;
+        transition: transform 0.2s ease;
+        font-size: 11px;
+        color: var(--info);
+      }
+      details.info-note-outer-details[open] > summary::before { transform: rotate(90deg); }
+      details.info-note-outer-details > summary:hover { text-decoration: underline; }
+      details.info-note-outer-details[open] > summary { margin-bottom: 10px; }
+      details.info-note-outer-details > .info-note { margin-top: 0; }
+
+      /* ---- Outer disclosure for the rail-comparison card ----
+         Same progressive-disclosure pattern as the framing twisty, but in
+         green to match this section's proof-accent (verified-on-chain). */
+      details.rail-outer-details > summary {
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--ok);
+        font-weight: 500;
+        list-style: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        user-select: none;
+        padding: 4px 0;
+      }
+      details.rail-outer-details > summary::-webkit-details-marker { display: none; }
+      details.rail-outer-details > summary::before {
+        content: "▸";
+        display: inline-block;
+        transition: transform 0.2s ease;
+        font-size: 11px;
+        color: var(--ok);
+      }
+      details.rail-outer-details[open] > summary::before { transform: rotate(90deg); }
+      details.rail-outer-details > summary:hover { text-decoration: underline; }
+      details.rail-outer-details[open] > summary { margin-bottom: 12px; }
+
+      /* ---- Icon-only button modifier ----
+         Drops the text label, balances the padding to a near-square shape,
+         and bumps the icon size for legibility. Tooltip + aria-label on each
+         use site preserves accessibility (mouse hover, screen readers). */
+      button.primary.icon-only {
+        padding: 10px;
+        gap: 0;
+      }
+      button.primary.icon-only .icon-svg {
+        width: 20px;
+        height: 20px;
+      }
+      button.icon-btn.icon-only {
+        padding: 7px;
+        gap: 0;
+      }
+      button.icon-btn.icon-only .icon-svg {
+        width: 14px;
+        height: 14px;
+      }
     </style>
   </head>
   <body>
@@ -449,37 +751,46 @@
     </header>
 
     <main>
-      <!-- Honest note about Circle batching — always visible above the composer -->
+      <!-- Problem-first framing: AI waste → nano-level fix → why Circle, not direct-on-chain -->
       <section class="card">
-        <h2>Why batching IS the feature <span class="muted">not a latency tax</span></h2>
+        <h2>Why AI waste needs nanopayments <span class="muted">not just any blockchain payment</span></h2>
+        <details class="info-note-outer-details">
+          <summary>Show the framing and live harness numbers</summary>
         <div class="info-note">
           <div class="info-note-lead">
-            <strong>Per-chunk pricing at $0.0005 is only viable when authorization is off-chain.</strong>
-            Gas would otherwise dominate — a $0.01 on-chain cost per authorization would make refusing the next chunk save the buyer less than it costs to operate. So the kill gate would be theatre, not economics.
-            Circle Gateway accepts each signed authorization in milliseconds (off-chain), then batches many of them into one on-chain Arc settlement in the background.
-            <strong>The amortization across N actions is what drives per-action overhead toward zero — which is the exact precondition for pay-for-outcomes via mid-stream cutoff.</strong>
-            Without batching, sub-cent per-chunk pricing isn't possible, and without sub-cent per-chunk pricing, the kill gate saves nothing.
+            <p><strong>The agent gold rush runs on probabilistic output.</strong> There's a rush to ship agents, marketplaces, and orchestrators — all at the mercy of the model emitting useful tokens. But model behavior is <em>probabilistic</em>: outputs drift, hallucinate, and break, especially with weak prompts. You pay for those tokens regardless, because every payment rail today is <em>pay-for-tokens</em> — subscriptions before, per-token after. Neither protects you <em>during</em> generation, when the waste is still avoidable. <strong>What's needed is pay-for-quality, not pay-for-tokens.</strong></p>
+            <p><strong>Why the fix has to be nano.</strong> The only way to stop paying for bad output is per-chunk: refuse to authorize the next slice the moment quality drops. But each refuse-or-pay decision has to cost a fraction of a cent. At Stripe's $0.30 minimum, or even on-chain gas (yes, on Arc), <em>stopping costs more than continuing</em> — so mid-stream cancellation becomes a feature you can't afford to use.</p>
+            <p><strong>Why Circle Nanopayments, not direct-on-chain.</strong> Even Arc's tiny gas is too expensive when paid per $0.0005 chunk. Circle Gateway accepts each chunk's authorization <em>off-chain</em> in milliseconds (essentially free), then bundles thousands of them into <em>one</em> on-chain Arc settlement in the background. You get sub-cent decisions <em>and</em> durable on-chain proof. Direct-on-chain alone gives you the proof without the sub-cent decisions — and the decisions are what make pay-for-outcomes possible.</p>
+            <p><strong>What Midstream builds on top.</strong> A <strong>live inference harness</strong> — three concurrent observers powered by <strong>Google Gemini</strong> — scores each chunk for topic drift, spec adherence, and verbatim use of your prompt's identifiers, then <strong>course-corrects by refusing the next chunk's authorization</strong> the moment trajectory diverges. This is harness engineering done <em>during</em> generation, not pre- or post-hoc. The harness only fits in the economic budget because Circle Nanopayments make per-chunk evaluation cheap enough: Gemini call ≈ $0.0001, chunk price = $0.0005, harness cost stays well below value moved. On any rail with $0.01+ overhead, the harness would burn the chunk's value before scoring returned.</p>
           </div>
-          <div class="info-note-grid">
+          <div class="harness-live-callout">
+            <span class="label">Live</span>
+            <span id="harness-live-numbers">(numbers populate after several chunks across sessions)</span>
+          </div>
+          <details class="info-note-details">
+            <summary>How it works under the hood <span class="muted">UUIDs, batches, on-chain proof verification</span></summary>
+            <div class="info-note-grid">
             <div class="info-note-col">
-              <h4>Per-chunk flow</h4>
+              <h4>What happens during a session</h4>
               <ul>
-                <li>Each paid chunk = one <strong>Circle Transfer ID</strong> (a UUID, shown in the Payment ledger). The authorization is accepted in <strong>milliseconds, off-chain</strong>.</li>
-                <li>Buyer's Gateway balance drops immediately (see the <strong>Gateway</strong> tile in the top bar). Seller is credited immediately. Both are off-chain bookkeeping.</li>
-                <li>Circle batches many UUIDs and settles them as <strong>one on-chain Arc tx</strong> on its own schedule (empirically every ~15 min during active periods).</li>
-                <li>UUIDs are <em>not</em> Arc tx hashes — they won't load at <code>testnet.arcscan.app/tx/&lt;uuid&gt;</code>.</li>
+                <li>Each chunk you receive = one Circle payment (a UUID in the Payment ledger). The authorization is accepted in <strong>milliseconds, off-chain</strong>.</li>
+                <li>Your Gateway balance drops immediately (see the <strong>Gateway</strong> tile up top). The seller is credited immediately. Both are off-chain bookkeeping.</li>
+                <li>Circle bundles many UUIDs and posts them to Arc as one transaction in the background (every ~15 min during active periods).</li>
+                <li>If quality drops, you stop authorizing — instantly, free. The seller stops generating. <strong>You pay only for the good prefix.</strong></li>
               </ul>
             </div>
             <div class="info-note-col">
-              <h4>Where to verify on Arc</h4>
+              <h4>How to see the on-chain proof</h4>
               <ul>
-                <li><strong>Resolve</strong> button (Payment ledger): shows the UUID's lifecycle status — <code>received → batched → completed</code>. Per Circle's API, the on-chain tx hash is not on the per-transfer record; it lives on the batch.</li>
-                <li><strong>On-chain evidence</strong> card (below the live session): every real Arc tx, grouped by Circle's batch settlements. All hashes clickable to <code>testnet.arcscan.app</code>.</li>
-                <li><strong>The buyer's kill decision is instant and free</strong> — it never waits for on-chain settlement, because settlement isn't on the critical path.</li>
+                <li>Each ledger row's <strong>Resolve</strong> button shows that payment's status: <code>received → batched → completed</code>.</li>
+                <li>UUIDs are not Arc tx hashes — pasting one at <code>arcscan.app/tx/&lt;uuid&gt;</code> won't work. The on-chain hash lives on the batch, not on individual transfers.</li>
+                <li>The <strong>On-chain evidence</strong> card below shows every actual Arc transaction Circle posted on your behalf — all clickable.</li>
               </ul>
             </div>
           </div>
+          </details>
         </div>
+        </details>
       </section>
 
       <!-- New session composer -->
@@ -492,13 +803,13 @@
               <label><input type="radio" name="usecase" value="text" checked /><span>Text (Gemini judge)</span></label>
               <label><input type="radio" name="usecase" value="code" /><span>Code (tsc + tests)</span></label>
             </div>
-            <button id="start" class="primary">Start session</button>
+            <button id="start" class="primary icon-only" title="Start session" aria-label="Start session"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg></button>
           </div>
           <div class="presets">
-            <button data-preset="text-sloppy" title="Underspecified text prompt — model drifts, Layer 1 catches it, payments stop">1️⃣ Sloppy text → expect kill (Layer 1)</button>
-            <button data-preset="text-focused" title="Same intent, focused, with backticked identifiers — all 3 layers happy, completion">2️⃣ Focused text → expect completion</button>
-            <button data-preset="text-spec-trap" title="Prompt names a deliberately unusual identifier the model is likely to default away from — Layer 3 catches the deviation">3️⃣ Spec-trap text → expect kill (Layer 2/3)</button>
-            <button data-preset="code-sloppy" title="Underspecified code prompt — tsc may catch missing types, kill fires">4️⃣ Sloppy code → expect kill</button>
+            <button data-preset="text-sloppy" title="A reasonable-looking prompt that drifts mid-stream. Layer 1 (Gemini topic-drift judge) catches the drift and fires Stop &amp; Correct. Demonstrates that natural-sounding prompts aren't safe from waste.">1️⃣ Reasonable Text - Expect Completion</button>
+            <button data-preset="text-focused" title="Focused prompt with backticked identifiers (EIP-712, signTypedData, viem). Layer 3 (deterministic regex) checks they appear verbatim in the response. Usually completes, but the model can still miss the spec.">2️⃣ Evaluatable Text (Might not complete)</button>
+            <button data-preset="text-spec-trap" title="Prompt names deliberately unusual identifiers (GatewayWalletBatched, validBefore) that the model often defaults away from. Layer 2/3 catches the deviation when the model substitutes common names.">3️⃣ Evaluatable Text 2 (Might not complete)</button>
+            <button data-preset="code-sloppy" title="Underspecified code prompt — tsc may catch missing types, harness fires stop &amp; correct">4️⃣ Sloppy code → expect stop &amp; correct</button>
             <button data-preset="code-focused" title="Specific signature, types, and tests — tsc + node --test pass, completion">5️⃣ Focused code → expect completion</button>
           </div>
           <div class="hint" id="composer-hint">Settings load from the server on page load.</div>
@@ -519,7 +830,7 @@
           <div class="response" id="response"></div>
         </div>
         <div class="card">
-          <h2>Quality timeline <span class="muted">score + Gemini reasoning</span></h2>
+          <h2>Live inference harness <span class="muted">Gemini-powered · per-chunk course correction</span></h2>
           <div class="timeline" id="timeline"></div>
         </div>
       </section>
@@ -566,19 +877,94 @@
         <div class="evidence-section">
           <h3>Direct on-chain Arc transactions <span class="muted" id="ev-onchain-subtitle"></span></h3>
           <div id="ev-onchain-list-wrap"></div>
-          <a id="ev-buyer-explorer-link" href="#" target="_blank" rel="noopener" class="explorer-link" style="display:none">View all on testnet.arcscan.app →</a>
+          <a id="ev-buyer-explorer-link" href="#" target="_blank" rel="noopener" class="explorer-link" style="display:none">View all on testnet.arcscan.app<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
         </div>
 
         <div class="evidence-section">
           <h3>Batch settlement events <span class="muted">grouped by Circle's settlement timestamps</span></h3>
           <div id="ev-batches-list-wrap"></div>
-          <a id="ev-gateway-explorer-link" href="#" target="_blank" rel="noopener" class="explorer-link" style="display:none">View GatewayWallet contract on testnet.arcscan.app →</a>
+          <a id="ev-gateway-explorer-link" href="#" target="_blank" rel="noopener" class="explorer-link" style="display:none">View GatewayWallet contract on testnet.arcscan.app<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
         </div>
 
         <div style="margin-top: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-          <button id="refresh-evidence" class="primary" style="font-size: 12px; padding: 6px 14px;">Refresh evidence</button>
+          <button id="refresh-evidence" class="icon-btn icon-only" title="Refresh — re-read evidence files from disk" aria-label="Refresh evidence"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></button>
           <span id="evidence-status" class="hint"></span>
         </div>
+      </section>
+
+      <!-- Rail comparison card: cost on other rails for the same paid actions -->
+      <section class="card" id="rail-comparison-section" style="display:none">
+        <h2>Why this only works on Circle / Arc <span class="muted">cost on other rails for the same paid actions</span></h2>
+        <details class="rail-outer-details">
+          <summary>Show the two-layer architecture and rail-cost comparison</summary>
+
+        <!-- Two-layer architecture explainer: Arc (chain) + Circle Gateway (batching) -->
+        <div class="layer-explainer">
+          <div class="layer-col">
+            <h4>The Arc layer — the settlement chain</h4>
+            <p>Arc is Circle's L1, purpose-built for stablecoin payments. It's where every Gateway batch actually lands.</p>
+            <ul>
+              <li><strong>~0.5 s deposit finality</strong> — fastest of all Gateway-supported chains.</li>
+              <li>Testnet chain ID <strong>5042002</strong>; the destination for every batch tx.</li>
+              <li>Without a fast, cheap settlement chain underneath, batched authorizations would lose their UX guarantee.</li>
+            </ul>
+          </div>
+          <div class="layer-col">
+            <h4>The Circle Gateway layer — the batching primitive</h4>
+            <p>Sub-cent per-chunk authorization, accepted off-chain in milliseconds, then bundled into one Arc settlement tx.</p>
+            <ul>
+              <li>Each chunk = one signed EIP-712 message. No per-action gas, no per-action on-chain footprint.</li>
+              <li>Many authorizations amortized into one batch settlement on Arc.</li>
+              <li>Without batching, even Arc's near-zero per-tx gas × hundreds of chunks would exceed the value moved.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="layer-conclusion">
+          <strong>Both layers are necessary.</strong> Arc alone (per-tx, even at near-zero gas) doesn't get you sub-cent per-chunk economics. Circle Gateway batching alone (without a fast, cheap settlement chain underneath) doesn't deliver the user experience or the affordable batch settlement. The architecture requires both — which is what the comparison table below makes concrete.
+        </div>
+        <table class="rail-comparison">
+          <thead>
+            <tr>
+              <th>Rail</th>
+              <th>Per-action overhead</th>
+              <th class="num">For <span id="rc-count">—</span> paid actions</th>
+              <th class="num">vs <span id="rc-value">—</span> of actual value moved</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="rail-bad">
+              <td>Stripe (cards)</td>
+              <td>$0.30 minimum / charge</td>
+              <td class="num" id="rc-stripe-total">—</td>
+              <td class="num" id="rc-stripe-pct">—</td>
+            </tr>
+            <tr class="rail-bad">
+              <td>Ethereum L1</td>
+              <td>~$0.30 gas / tx (avg)</td>
+              <td class="num" id="rc-eth-total">—</td>
+              <td class="num" id="rc-eth-pct">—</td>
+            </tr>
+            <tr class="rail-meh">
+              <td>Polygon PoS</td>
+              <td>~$0.01 gas / tx</td>
+              <td class="num" id="rc-poly-total">—</td>
+              <td class="num" id="rc-poly-pct">—</td>
+            </tr>
+            <tr class="rail-good">
+              <td><strong>Circle Nanopayments / Arc</strong></td>
+              <td><strong>batched, ~$0 / authorization</strong></td>
+              <td class="num"><strong>~$0</strong></td>
+              <td class="num"><strong>~0%</strong></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="rail-subscription-note">
+          <strong>vs subscriptions:</strong> ChatGPT Plus is $20/mo for 25 Deep Research queries — paid whether you use them or not. A stopped Midstream run costs $0.002–$0.006 total, paid only for the prefix that passed quality.
+        </div>
+        <div class="rail-source-note">
+          Numbers from <code>docs/MARGIN_ANALYSIS.md</code>. Stripe rate from <a href="https://stripe.com/pricing" target="_blank" rel="noopener">stripe.com/pricing</a>, Ethereum gas (conservative average) from <a href="https://etherscan.io/gastracker" target="_blank" rel="noopener">etherscan.io/gastracker</a>, Circle batched-settlement model from <a href="https://developers.circle.com/gateway/nanopayments/concepts/batched-settlement" target="_blank" rel="noopener">Circle's batched-settlement docs</a>.
+        </div>
+        </details>
       </section>
 
       <!-- On-chain settlements panel -->
@@ -595,7 +981,7 @@
           </div>
         </div>
         <div style="margin-top: 12px;">
-          <button id="refresh-onchain" class="primary" style="font-size: 12px; padding: 6px 14px;">Refresh on-chain settlements</button>
+          <button id="refresh-onchain" class="icon-btn icon-only" title="Refresh — re-fetch transfers to seller from Circle Gateway API" aria-label="Refresh on-chain transfers"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></button>
           <span id="onchain-status" class="hint" style="margin-left: 10px;"></span>
         </div>
         <div id="onchain-list" style="margin-top: 12px;"></div>
@@ -677,6 +1063,22 @@
           node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
         }
         return node;
+      }
+
+      // Inline SVG icon helpers — used for dynamically-built links inside the
+      // Resolve detail panel. currentColor inheritance picks up the parent's
+      // color so a single icon factory works for any text color context.
+      function iconExternal() {
+        const span = document.createElement("span");
+        span.className = "icon-svg";
+        span.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>';
+        return span;
+      }
+      function iconRefresh() {
+        const span = document.createElement("span");
+        span.className = "icon-svg";
+        span.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>';
+        return span;
       }
 
       function shortAddr(a) { if (!a || a.length < 12) return a || ""; return a.slice(0, 6) + "…" + a.slice(-4); }
@@ -867,7 +1269,7 @@
           "kill-decision": (e) => {
             const card = el("div", { class: "assessment kill" },
               el("div", { class: "a-head" },
-                el("span", { class: "a-chunk" }, `☠ KILLED at chunk ${e.chunkIndex}`),
+                el("span", { class: "a-chunk" }, `⏸ Stop & correct — chunk ${e.chunkIndex}`),
                 el("span", { class: "a-score" }, "STOP"),
               ),
               el("div", { class: "a-reason" }, e.reason),
@@ -889,12 +1291,16 @@
             let cls = "ok";
             if (e.outcome === "killed") cls = "bad";
             else if (e.outcome === "error" || e.outcome === "budget") cls = "warn";
+            // Display "stopped" instead of "killed" — the harness performs a
+            // stop-and-correct, not a termination. Internal event payload field
+            // name (`outcome: "killed"`) is unchanged for back-compat.
+            const outcomeLabel = e.outcome === "killed" ? "stopped" : e.outcome;
             $("current-status").className = `badge ${cls}`;
-            $("current-status").textContent = e.outcome;
+            $("current-status").textContent = outcomeLabel;
 
             const summary = el("div", { class: "assessment" },
               el("div", { class: "a-head" },
-                el("span", { class: "a-chunk" }, `Session ${e.outcome}`),
+                el("span", { class: "a-chunk" }, `Session ${outcomeLabel}`),
                 el("span", { class: "a-score" }, fmtUsd(e.spentUsdc)),
               ),
               el("div", { class: "a-reason" },
@@ -902,7 +1308,7 @@
                 `would-have ${fmtUsd(e.wouldHaveSpentUsdc)} · saved ${fmtUsd(e.wouldHaveSpentUsdc - e.spentUsdc)}`
               ),
               e.errorMessage ? el("div", { class: "a-reason" }, "✗ " + e.errorMessage) : null,
-              e.killReason ? el("div", { class: "a-reason" }, "kill reason: " + e.killReason) : null,
+              e.killReason ? el("div", { class: "a-reason" }, "stop reason: " + e.killReason) : null,
             );
             $("timeline").appendChild(summary);
 
@@ -1035,8 +1441,8 @@
             const link = el("a", {
               href: `${state.explorer}/address/${state.sellerAddress}?tab=token_transfers`,
               target: "_blank", rel: "noopener",
-              style: "display: inline-block; margin-top: 6px; color: var(--info); font-weight: 500;",
-            }, "View seller's incoming USDC on Arc →");
+              class: "resolve-arc-link",
+            }, "View seller's incoming USDC on Arc", iconExternal());
             settle.appendChild(link);
           }
           settle.appendChild(el("div", { style: "margin-top: 6px; font-size: 11px; color: var(--text-muted);" },
@@ -1064,10 +1470,12 @@
             style: "margin-top: 4px; font-size: 11px; color: var(--text-muted);",
           }, "Empirically, prior batches in this demo's history landed every ~15 min during active periods — see Batch settlement events in the On-chain evidence card below."));
           settle.appendChild(el("button", {
-            class: "resolve-btn",
+            class: "icon-btn icon-only",
             style: "margin-top: 8px;",
+            title: "Re-check now",
+            "aria-label": "Re-check now",
             onclick: () => resolveTransfer(btn, transferId, 0),
-          }, "Re-check now"));
+          }, iconRefresh()));
         } else if (status === "failed") {
           settle.appendChild(el("strong", { style: "color: var(--bad);" }, "✗ Settlement failed"));
           settle.appendChild(el("div", { style: "margin-top: 4px; font-size: 12px; color: var(--text-muted);" },
@@ -1181,6 +1589,7 @@
       function renderEvidence(data) {
         const oe = data.onchainEvidence;
         const vr = data.verifyReport;
+        renderRailComparison(vr);
 
         // ---- Metrics ----
         if (vr && vr.uniqueUuids != null) {
@@ -1286,6 +1695,39 @@
       }
 
       // ================================================================
+      // Rail comparison — dynamic: uses actual paid-action count + value
+      // moved to compute what the same chunks would cost on Stripe / ETH /
+      // Polygon. Hides the card if no verify-report is loaded yet.
+      // ================================================================
+      function renderRailComparison(vr) {
+        const card = $("rail-comparison-section");
+        if (!vr || !vr.uniqueUuids) { card.style.display = "none"; return; }
+        card.style.display = "block";
+
+        const count = vr.uniqueUuids;
+        const value = (vr.settlements && vr.settlements.totalAmountUsdc) || count * 0.0005;
+
+        const stripeTotal = count * 0.30;
+        const ethTotal    = count * 0.30;
+        const polyTotal   = count * 0.01;
+
+        const pct = (overhead) => {
+          if (!value) return "—";
+          const r = (overhead / value) * 100;
+          return r.toLocaleString(undefined, { maximumFractionDigits: 0 }) + "%";
+        };
+
+        $("rc-count").textContent = String(count);
+        $("rc-value").textContent = fmtUsd(value);
+        $("rc-stripe-total").textContent = "$" + stripeTotal.toFixed(2);
+        $("rc-stripe-pct").textContent   = pct(stripeTotal);
+        $("rc-eth-total").textContent    = "$" + ethTotal.toFixed(2);
+        $("rc-eth-pct").textContent      = pct(ethTotal);
+        $("rc-poly-total").textContent   = "$" + polyTotal.toFixed(2);
+        $("rc-poly-pct").textContent     = pct(polyTotal);
+      }
+
+      // ================================================================
       // Periodic status refresh
       // ================================================================
       async function refreshStatus() {
@@ -1308,6 +1750,37 @@
           } else {
             $("total-gateway").textContent = "—";
           }
+
+          // Live harness numbers — keep the info-note's economic claim
+          // grounded in observed data. We approximate Gemini-per-paid-chunk
+          // by dividing total estimated Gemini spend by the count of paid
+          // chunks across all sessions; this is an upper bound (some Gemini
+          // calls run on warmup chunks that don't trigger payment), so the
+          // ratio shown is conservative — actual harness cost is lower.
+          const liveSpan = $("harness-live-numbers");
+          if (liveSpan) {
+            const geminiTotal = (j.gemini && typeof j.gemini.estimatedUsd === "number") ? j.gemini.estimatedUsd : 0;
+            const geminiCap   = (j.gemini && typeof j.gemini.capUsd === "number") ? j.gemini.capUsd : 1;
+            const txCount     = (j.totals && j.totals.transactions) || 0;
+            const chunkPrice  = state.pricePerChunkUsdc || 0.0005;
+            if (txCount >= 5 && geminiTotal > 0) {
+              const avgPerChunk    = geminiTotal / txCount;
+              const ratioOfPayment = (avgPerChunk / chunkPrice) * 100;
+              // String concatenation rather than template literals so the
+              // literal "$" characters before each numeric value survive
+              // the JSON-encoded edit pipeline reliably.
+              liveSpan.innerHTML =
+                "Gemini cost <strong>" + fmtUsd(geminiTotal, 4) + "</strong> across " +
+                "<strong>" + txCount + "</strong> paid chunks " +
+                "(avg <strong>" + fmtUsd(avgPerChunk, 5) + "</strong>/chunk) " +
+                "against the " + fmtUsd(geminiCap, 2) + " session cap. " +
+                "Harness cost is ~<strong>" + ratioOfPayment.toFixed(0) + "%</strong> of the " +
+                fmtUsd(chunkPrice, 4) + " chunk price \u2014 well below value moved. " +
+                "Conservative bound: actual is lower since Gemini also runs on warmup chunks that don't trigger payment.";
+            } else {
+              liveSpan.textContent = "(numbers populate after several chunks across sessions)";
+            }
+          }
           renderHistory(j.sessions);
         } catch (e) {}
       }
@@ -1322,7 +1795,7 @@
         for (const s of sessions) {
           const statusBadge =
             s.outcome === "completed" ? el("span", { class: "badge ok" }, "completed")
-            : s.outcome === "killed" ? el("span", { class: "badge bad" }, "killed")
+            : s.outcome === "killed" ? el("span", { class: "badge bad" }, "stopped")
             : s.outcome === "error" ? el("span", { class: "badge warn" }, "error")
             : s.outcome === "budget" ? el("span", { class: "badge warn" }, "budget")
             : el("span", { class: "badge info" }, "running");
