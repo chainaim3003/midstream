@@ -33,6 +33,22 @@ import { EventEmitter } from "node:events";
 import type { SessionEvent } from "./events.js";
 import { isTerminal } from "./events.js";
 
+// Distributive Omit: standard `Omit<T, K>` over a discriminated union
+// collapses the union into a single non-discriminating shape, which loses
+// the per-variant property typing. `T extends unknown ? Omit<T, K> : never`
+// distributes the Omit across each member of the union, preserving each
+// variant's discriminator and its variant-specific fields.
+//
+// Without this, calling `bus.publish({ type: "session-started", useCase: ... })`
+// fails to type-check because `useCase` is not present on the collapsed type.
+type DistributiveOmit<T, K extends keyof any> = T extends unknown ? Omit<T, K> : never;
+
+// Shape accepted by SessionBus.publish(): one of the SessionEvent variants,
+// minus sessionId and ts (which the bus stamps), with ts optionally provided.
+export type PublishableEvent = DistributiveOmit<SessionEvent, "sessionId" | "ts"> & {
+  ts?: number;
+};
+
 export class SessionBus {
   readonly sessionId: string;
   readonly startedAt: number;
@@ -60,7 +76,7 @@ export class SessionBus {
    * Publish an event to the session. Stamps sessionId and ts if missing.
    * Emits synchronously to all live subscribers.
    */
-  publish(event: Omit<SessionEvent, "sessionId" | "ts"> & Partial<Pick<SessionEvent, "ts">>): void {
+  publish(event: PublishableEvent): void {
     const full = {
       ...event,
       sessionId: this.sessionId,

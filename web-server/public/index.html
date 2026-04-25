@@ -1,0 +1,1342 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Midstream — pay for outcomes, not tokens</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --bg-subtle: #fafafa;
+        --bg-raised: #ffffff;
+        --border: #e5e7eb;
+        --border-strong: #d1d5db;
+        --text: #111827;
+        --text-muted: #6b7280;
+        --text-faint: #9ca3af;
+        --accent: #111827;
+        --ok: #047857;
+        --ok-bg: #d1fae5;
+        --warn: #b45309;
+        --warn-bg: #fef3c7;
+        --bad: #b91c1c;
+        --bad-bg: #fee2e2;
+        --info: #1d4ed8;
+        --info-bg: #dbeafe;
+        --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+        --radius: 8px;
+        --radius-sm: 6px;
+        --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.04);
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      button, input, textarea, select { font-family: inherit; font-size: inherit; color: inherit; }
+
+      header.topbar {
+        position: sticky; top: 0; z-index: 10;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 14px 28px; background: var(--bg);
+        border-bottom: 1px solid var(--border);
+      }
+      header.topbar .brand { display: flex; align-items: baseline; gap: 12px; }
+      header.topbar .brand h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+      header.topbar .brand .tagline { color: var(--text-muted); font-size: 13px; }
+      header.topbar .totals { display: flex; gap: 20px; font-size: 13px; }
+      header.topbar .totals .metric { display: flex; flex-direction: column; align-items: flex-end; }
+      header.topbar .totals .metric .label {
+        color: var(--text-muted); font-size: 11px;
+        text-transform: uppercase; letter-spacing: 0.05em;
+      }
+      header.topbar .totals .metric .value {
+        font-variant-numeric: tabular-nums; font-weight: 600;
+      }
+      header.topbar .status-dot {
+        display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+        background: var(--text-faint); margin-right: 6px; vertical-align: middle;
+      }
+      header.topbar .status-dot.ok { background: var(--ok); }
+      header.topbar .status-dot.bad { background: var(--bad); }
+
+      main {
+        max-width: 1440px; margin: 0 auto; padding: 24px 28px 60px;
+        display: grid; gap: 20px;
+      }
+
+      section.card {
+        background: var(--bg-raised);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 20px;
+      }
+      section.card > h2 {
+        font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--text-muted); margin: 0 0 14px; font-weight: 600;
+      }
+      section.card > h2 .muted {
+        text-transform: none; letter-spacing: normal; font-weight: 400;
+        color: var(--text-faint); margin-left: 8px;
+      }
+
+      .composer { display: grid; gap: 12px; }
+      .composer textarea {
+        width: 100%; min-height: 88px; padding: 12px;
+        border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+        background: var(--bg); resize: vertical;
+        font-family: var(--sans); line-height: 1.45;
+      }
+      .composer textarea:focus {
+        outline: none; border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
+      }
+      .composer .row {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 16px; flex-wrap: wrap;
+      }
+      .composer .usecase {
+        display: inline-flex; background: var(--bg-subtle);
+        border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px;
+      }
+      .composer .usecase label { padding: 6px 14px; cursor: pointer; border-radius: calc(var(--radius-sm) - 2px); user-select: none; }
+      .composer .usecase input { display: none; }
+      .composer .usecase input:checked + span {
+        background: var(--bg-raised); border: 1px solid var(--border-strong);
+        box-shadow: var(--shadow-sm);
+      }
+      .composer .usecase span {
+        display: inline-block; padding: 4px 10px;
+        border: 1px solid transparent; border-radius: calc(var(--radius-sm) - 2px);
+        font-size: 13px;
+      }
+      .composer .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+      .composer .presets button {
+        background: var(--bg-subtle); border: 1px solid var(--border);
+        color: var(--text-muted); padding: 4px 10px; font-size: 12px;
+        border-radius: 999px; cursor: pointer;
+      }
+      .composer .presets button:hover { border-color: var(--border-strong); color: var(--text); }
+      button.primary {
+        background: var(--text); color: #fff; border: none;
+        padding: 10px 20px; border-radius: var(--radius-sm);
+        cursor: pointer; font-weight: 500; letter-spacing: 0.01em;
+      }
+      button.primary:hover { background: #000; }
+      button.primary:disabled { background: var(--text-faint); cursor: not-allowed; }
+
+      .session-meta {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 16px;
+      }
+      .session-meta .kv .k {
+        color: var(--text-muted); font-size: 11px;
+        text-transform: uppercase; letter-spacing: 0.05em;
+      }
+      .session-meta .kv .v {
+        font-family: var(--mono); font-size: 13px; margin-top: 2px; word-break: break-all;
+      }
+      .badge {
+        display: inline-block; padding: 2px 8px; border-radius: 999px;
+        font-size: 11px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.05em;
+      }
+      .badge.ok      { background: var(--ok-bg);   color: var(--ok); }
+      .badge.bad     { background: var(--bad-bg);  color: var(--bad); }
+      .badge.warn    { background: var(--warn-bg); color: var(--warn); }
+      .badge.info    { background: var(--info-bg); color: var(--info); }
+      .badge.neutral { background: var(--bg-subtle); color: var(--text-muted); border: 1px solid var(--border); }
+
+      .two-col {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+      }
+      @media (max-width: 960px) { .two-col { grid-template-columns: 1fr; } }
+
+      .response {
+        font-family: var(--mono); font-size: 13px; line-height: 1.55;
+        white-space: pre-wrap; word-break: break-word;
+        min-height: 200px; max-height: 480px; overflow-y: auto;
+        background: var(--bg-subtle);
+        border: 1px solid var(--border); border-radius: var(--radius-sm);
+        padding: 14px;
+      }
+      .response .chunk-marker {
+        display: inline-block; color: var(--text-faint);
+        font-size: 10px; vertical-align: super;
+      }
+      .response:empty::before {
+        content: "Tokens will stream here.";
+        color: var(--text-faint); font-style: italic;
+      }
+
+      .timeline {
+        display: flex; flex-direction: column; gap: 8px;
+        max-height: 480px; overflow-y: auto;
+      }
+      .assessment {
+        border: 1px solid var(--border); border-radius: var(--radius-sm);
+        padding: 10px 12px; display: grid; gap: 4px;
+      }
+      .assessment .a-head {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      }
+      .assessment .a-chunk { font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
+      .assessment .a-score { font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+      .assessment .a-avg { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+      .assessment .a-reason { font-size: 12px; color: var(--text-muted); }
+      .assessment.good  .a-score { color: var(--ok); }
+      .assessment.warn  .a-score { color: var(--warn); }
+      .assessment.bad   .a-score { color: var(--bad); }
+      .assessment.kill  { background: var(--bad-bg); border-color: var(--bad); }
+
+      table.ledger { width: 100%; border-collapse: collapse; font-size: 13px; }
+      table.ledger th, table.ledger td {
+        text-align: left; padding: 8px 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      table.ledger th {
+        color: var(--text-muted); font-weight: 500; font-size: 11px;
+        text-transform: uppercase; letter-spacing: 0.05em;
+      }
+      table.ledger td.mono { font-family: var(--mono); font-size: 12px; }
+      table.ledger td .resolve-btn {
+        background: var(--bg-subtle); border: 1px solid var(--border);
+        color: var(--info); padding: 2px 10px; font-size: 11px;
+        border-radius: 999px; cursor: pointer;
+      }
+      table.ledger td .resolve-btn:hover { border-color: var(--info); background: var(--info-bg); }
+      table.ledger td .resolve-btn:disabled { color: var(--text-faint); cursor: not-allowed; }
+      table.ledger tr.resolved td .resolve-btn { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+
+      tr.resolve-details td {
+        background: var(--bg-subtle); border-bottom: 1px solid var(--border);
+        padding: 10px 14px;
+      }
+      tr.resolve-details .kv-grid {
+        display: grid; grid-template-columns: auto 1fr; gap: 4px 12px;
+        font-family: var(--mono); font-size: 12px;
+      }
+      tr.resolve-details .kv-grid .k { color: var(--text-muted); }
+      tr.resolve-details .kv-grid .v { word-break: break-all; }
+      tr.resolve-details a { color: var(--info); }
+      tr.resolve-details pre {
+        background: #fff; border: 1px solid var(--border);
+        padding: 8px; border-radius: 4px; overflow-x: auto;
+        font-size: 11px; margin: 6px 0 0; max-height: 200px;
+      }
+
+      .empty-state {
+        padding: 24px; text-align: center;
+        color: var(--text-faint); font-style: italic;
+      }
+      .history { display: flex; flex-direction: column; gap: 8px; }
+      .history .hsession {
+        display: grid; grid-template-columns: 100px 1fr auto auto;
+        gap: 12px; align-items: center;
+        padding: 10px 12px; border: 1px solid var(--border);
+        border-radius: var(--radius-sm); font-size: 13px;
+      }
+      .history .hsession .hprompt {
+        color: var(--text-muted);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .history .hsession .hspend { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+      .hint { color: var(--text-muted); font-size: 12px; margin-top: 4px; }
+      .info-note {
+        background: var(--info-bg); border: 1px solid #93c5fd;
+        color: #1e40af; padding: 10px 12px;
+        border-radius: var(--radius-sm); font-size: 12px; line-height: 1.55;
+      }
+      .info-note strong { color: #1e3a8a; }
+      .info-note code {
+        background: rgba(255, 255, 255, 0.6); padding: 1px 4px; border-radius: 3px;
+        font-family: var(--mono); font-size: 11px;
+      }
+      .error {
+        color: var(--bad); background: var(--bad-bg);
+        border: 1px solid var(--bad); padding: 10px 12px;
+        border-radius: var(--radius-sm); font-size: 13px;
+      }
+
+      .onchain-panel .grid {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 12px;
+      }
+      .onchain-panel .grid a {
+        background: var(--bg-subtle); border: 1px solid var(--border);
+        padding: 10px 12px; border-radius: var(--radius-sm);
+        display: block; text-decoration: none; color: var(--text);
+        font-family: var(--mono); font-size: 12px; word-break: break-all;
+      }
+      .onchain-panel .grid a:hover { border-color: var(--border-strong); }
+      .onchain-panel .grid .label {
+        color: var(--text-muted); font-size: 11px;
+        text-transform: uppercase; letter-spacing: 0.05em;
+        margin-bottom: 4px; display: block;
+      }
+
+      /* On-chain Evidence card */
+      .evidence-metrics {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px; margin-bottom: 18px;
+      }
+      .evidence-metric {
+        background: var(--bg-subtle); border: 1px solid var(--border);
+        border-radius: var(--radius-sm); padding: 14px;
+      }
+      .evidence-metric .em-label {
+        color: var(--text-muted); font-size: 11px;
+        text-transform: uppercase; letter-spacing: 0.05em;
+      }
+      .evidence-metric .em-value {
+        font-size: 28px; font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.1; margin-top: 4px;
+      }
+      .evidence-metric .em-hint {
+        font-size: 11px; color: var(--text-faint);
+        margin-top: 4px;
+      }
+      .evidence-section { margin-top: 16px; }
+      .evidence-section h3 {
+        font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;
+        color: var(--text-muted); margin: 0 0 8px; font-weight: 600;
+      }
+      .evidence-section h3 .muted {
+        text-transform: none; letter-spacing: normal; font-weight: 400;
+        color: var(--text-faint); margin-left: 8px;
+      }
+      .evidence-tx-list, .evidence-batch-list {
+        display: flex; flex-direction: column; gap: 4px;
+        max-height: 240px; overflow-y: auto;
+        border: 1px solid var(--border); border-radius: var(--radius-sm);
+      }
+      .evidence-tx-row {
+        display: grid; grid-template-columns: 60px 1fr auto;
+        gap: 12px; align-items: center;
+        padding: 8px 12px;
+        text-decoration: none; color: var(--text);
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+      }
+      .evidence-tx-row:last-child { border-bottom: none; }
+      .evidence-tx-row:hover { background: var(--bg-subtle); }
+      .evidence-tx-row .ev-tx-index { color: var(--text-faint); font-family: var(--mono); }
+      .evidence-tx-row .ev-tx-hash { font-family: var(--mono); color: var(--info); }
+      .evidence-tx-row .ev-tx-time { color: var(--text-muted); font-size: 11px; }
+      .evidence-batch-row {
+        display: grid; grid-template-columns: 80px 100px 80px 1fr;
+        gap: 12px; align-items: center;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+      }
+      .evidence-batch-row:last-child { border-bottom: none; }
+      .evidence-batch-row .ev-batch-index { font-weight: 600; }
+      .evidence-batch-row .ev-batch-amount { font-family: var(--mono); }
+      .evidence-batch-row .ev-batch-time { color: var(--text-muted); font-size: 11px; }
+      .explorer-link {
+        display: inline-block; margin-top: 8px;
+        color: var(--info); text-decoration: none; font-size: 12px;
+      }
+      .explorer-link:hover { text-decoration: underline; }
+      .evidence-empty {
+        padding: 14px; text-align: center; font-size: 12px;
+        color: var(--text-muted); font-style: italic;
+        border: 1px dashed var(--border); border-radius: var(--radius-sm);
+      }
+      .evidence-empty code {
+        font-family: var(--mono); background: var(--bg-subtle);
+        padding: 1px 4px; border-radius: 3px;
+      }
+
+      /* ---- Phase accent bars (per Stripe Apps design pattern: a color bar
+         at the top of the section helps users quickly identify which phase
+         they're in). Composer stays neutral as the entry point; live-session
+         sections share a blue accent (action in progress); evidence/proof
+         sections share a green accent (verified on-chain). ---- */
+      section.card { transition: box-shadow 0.18s ease; }
+      section.card:hover { box-shadow: 0 4px 16px rgba(17, 24, 39, 0.06); }
+
+      section.card#current-section,
+      section.card#ledger-section { border-top: 3px solid #3b82f6; }
+      section.two-col#stream-section .card { border-top: 3px solid #3b82f6; }
+
+      section.card#evidence-section,
+      section.card.onchain-panel { border-top: 3px solid #10b981; }
+
+      /* ---- Info-note grid: two scannable columns instead of a paragraph ---- */
+      .info-note-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin-top: 2px;
+      }
+      @media (max-width: 760px) { .info-note-grid { grid-template-columns: 1fr; } }
+      .info-note-col h4 {
+        margin: 0 0 6px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #1e3a8a;
+      }
+      .info-note-col ul {
+        margin: 0;
+        padding-left: 18px;
+        font-size: 12px;
+        line-height: 1.55;
+      }
+      .info-note-col li { margin-bottom: 5px; }
+      .info-note-col li:last-child { margin-bottom: 0; }
+
+      /* Lead paragraph above the two-column split — the headline economic
+         explanation of why batching makes pay-for-outcomes possible. */
+      .info-note-lead {
+        background: rgba(255, 255, 255, 0.55);
+        border-left: 3px solid #1d4ed8;
+        padding: 10px 14px;
+        margin-bottom: 14px;
+        border-radius: 4px;
+        font-size: 12.5px;
+        line-height: 1.6;
+        color: #1e3a8a;
+      }
+      .info-note-lead strong { color: #0f172a; }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <h1>Midstream</h1>
+        <span class="tagline">Pay for outcomes, not tokens.</span>
+      </div>
+      <div class="totals">
+        <div class="metric">
+          <span class="label">Seller</span>
+          <span class="value"><span id="status-dot" class="status-dot"></span><span id="seller-status">checking…</span></span>
+        </div>
+        <div class="metric">
+          <span class="label">Sessions</span>
+          <span class="value" id="total-sessions">0</span>
+        </div>
+        <div class="metric">
+          <span class="label">Gateway</span>
+          <span class="value" id="total-gateway" title="Buyer's available USDC in Circle Gateway, polled from Circle's API. Drops as Circle's batcher settles authorizations on Arc.">—</span>
+        </div>
+        <div class="metric">
+          <span class="label">Payment IDs</span>
+          <span class="value" id="total-txs">0</span>
+        </div>
+        <div class="metric">
+          <span class="label">USDC spent</span>
+          <span class="value" id="total-spent">$0.0000</span>
+        </div>
+        <div class="metric">
+          <span class="label">Gemini cost</span>
+          <span class="value" id="total-gemini">$0.0000</span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- Honest note about Circle batching — always visible above the composer -->
+      <section class="card">
+        <h2>Why batching IS the feature <span class="muted">not a latency tax</span></h2>
+        <div class="info-note">
+          <div class="info-note-lead">
+            <strong>Per-chunk pricing at $0.0005 is only viable when authorization is off-chain.</strong>
+            Gas would otherwise dominate — a $0.01 on-chain cost per authorization would make refusing the next chunk save the buyer less than it costs to operate. So the kill gate would be theatre, not economics.
+            Circle Gateway accepts each signed authorization in milliseconds (off-chain), then batches many of them into one on-chain Arc settlement in the background.
+            <strong>The amortization across N actions is what drives per-action overhead toward zero — which is the exact precondition for pay-for-outcomes via mid-stream cutoff.</strong>
+            Without batching, sub-cent per-chunk pricing isn't possible, and without sub-cent per-chunk pricing, the kill gate saves nothing.
+          </div>
+          <div class="info-note-grid">
+            <div class="info-note-col">
+              <h4>Per-chunk flow</h4>
+              <ul>
+                <li>Each paid chunk = one <strong>Circle Transfer ID</strong> (a UUID, shown in the Payment ledger). The authorization is accepted in <strong>milliseconds, off-chain</strong>.</li>
+                <li>Buyer's Gateway balance drops immediately (see the <strong>Gateway</strong> tile in the top bar). Seller is credited immediately. Both are off-chain bookkeeping.</li>
+                <li>Circle batches many UUIDs and settles them as <strong>one on-chain Arc tx</strong> on its own schedule (empirically every ~15 min during active periods).</li>
+                <li>UUIDs are <em>not</em> Arc tx hashes — they won't load at <code>testnet.arcscan.app/tx/&lt;uuid&gt;</code>.</li>
+              </ul>
+            </div>
+            <div class="info-note-col">
+              <h4>Where to verify on Arc</h4>
+              <ul>
+                <li><strong>Resolve</strong> button (Payment ledger): shows the UUID's lifecycle status — <code>received → batched → completed</code>. Per Circle's API, the on-chain tx hash is not on the per-transfer record; it lives on the batch.</li>
+                <li><strong>On-chain evidence</strong> card (below the live session): every real Arc tx, grouped by Circle's batch settlements. All hashes clickable to <code>testnet.arcscan.app</code>.</li>
+                <li><strong>The buyer's kill decision is instant and free</strong> — it never waits for on-chain settlement, because settlement isn't on the critical path.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- New session composer -->
+      <section class="card">
+        <h2>New session</h2>
+        <div class="composer">
+          <textarea id="prompt" placeholder="Write a 200-word brief on…"></textarea>
+          <div class="row">
+            <div class="usecase">
+              <label><input type="radio" name="usecase" value="text" checked /><span>Text (Gemini judge)</span></label>
+              <label><input type="radio" name="usecase" value="code" /><span>Code (tsc + tests)</span></label>
+            </div>
+            <button id="start" class="primary">Start session</button>
+          </div>
+          <div class="presets">
+            <button data-preset="text-sloppy" title="Underspecified text prompt — model drifts, Layer 1 catches it, payments stop">1️⃣ Sloppy text → expect kill (Layer 1)</button>
+            <button data-preset="text-focused" title="Same intent, focused, with backticked identifiers — all 3 layers happy, completion">2️⃣ Focused text → expect completion</button>
+            <button data-preset="text-spec-trap" title="Prompt names a deliberately unusual identifier the model is likely to default away from — Layer 3 catches the deviation">3️⃣ Spec-trap text → expect kill (Layer 2/3)</button>
+            <button data-preset="code-sloppy" title="Underspecified code prompt — tsc may catch missing types, kill fires">4️⃣ Sloppy code → expect kill</button>
+            <button data-preset="code-focused" title="Specific signature, types, and tests — tsc + node --test pass, completion">5️⃣ Focused code → expect completion</button>
+          </div>
+          <div class="hint" id="composer-hint">Settings load from the server on page load.</div>
+          <div class="error" id="composer-error" style="display:none"></div>
+        </div>
+      </section>
+
+      <!-- Current session -->
+      <section class="card" id="current-section" style="display:none">
+        <h2>Current session <span class="badge neutral" id="current-status">pending</span></h2>
+        <div class="session-meta" id="current-meta"></div>
+      </section>
+
+      <!-- Two-column response + timeline -->
+      <section class="two-col" id="stream-section" style="display:none">
+        <div class="card">
+          <h2>Response stream</h2>
+          <div class="response" id="response"></div>
+        </div>
+        <div class="card">
+          <h2>Quality timeline <span class="muted">score + Gemini reasoning</span></h2>
+          <div class="timeline" id="timeline"></div>
+        </div>
+      </section>
+
+      <!-- Payment ledger -->
+      <section class="card" id="ledger-section" style="display:none">
+        <h2>Payment ledger <span class="muted">Circle Transfer IDs — click Resolve for on-chain status</span></h2>
+        <table class="ledger" id="ledger">
+          <thead>
+            <tr>
+              <th style="width:40px">#</th>
+              <th style="width:90px">Chunk</th>
+              <th style="width:110px">Price</th>
+              <th>Circle Transfer ID</th>
+              <th style="width:120px">Time</th>
+              <th style="width:120px">Resolve</th>
+            </tr>
+          </thead>
+          <tbody id="ledger-body"></tbody>
+        </table>
+      </section>
+
+      <!-- On-chain Evidence (reads from logs files) -->
+      <section class="card" id="evidence-section">
+        <h2>On-chain evidence <span class="muted">real Arc transactions, all clickable</span></h2>
+        <div class="evidence-metrics">
+          <div class="evidence-metric">
+            <span class="em-label">Paid settlement actions</span>
+            <span class="em-value" id="ev-paid-count">—</span>
+            <span class="em-hint" id="ev-paid-hint">via Circle Gateway</span>
+          </div>
+          <div class="evidence-metric">
+            <span class="em-label">Direct on-chain Arc tx</span>
+            <span class="em-value" id="ev-onchain-count">—</span>
+            <span class="em-hint" id="ev-onchain-hint">at buyer EOA, click to verify</span>
+          </div>
+          <div class="evidence-metric">
+            <span class="em-label">Batch settlement events</span>
+            <span class="em-value" id="ev-batch-count">—</span>
+            <span class="em-hint" id="ev-batch-hint">at GatewayWallet contract</span>
+          </div>
+        </div>
+
+        <div class="evidence-section">
+          <h3>Direct on-chain Arc transactions <span class="muted" id="ev-onchain-subtitle"></span></h3>
+          <div id="ev-onchain-list-wrap"></div>
+          <a id="ev-buyer-explorer-link" href="#" target="_blank" rel="noopener" class="explorer-link" style="display:none">View all on testnet.arcscan.app →</a>
+        </div>
+
+        <div class="evidence-section">
+          <h3>Batch settlement events <span class="muted">grouped by Circle's settlement timestamps</span></h3>
+          <div id="ev-batches-list-wrap"></div>
+          <a id="ev-gateway-explorer-link" href="#" target="_blank" rel="noopener" class="explorer-link" style="display:none">View GatewayWallet contract on testnet.arcscan.app →</a>
+        </div>
+
+        <div style="margin-top: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <button id="refresh-evidence" class="primary" style="font-size: 12px; padding: 6px 14px;">Refresh evidence</button>
+          <span id="evidence-status" class="hint"></span>
+        </div>
+      </section>
+
+      <!-- On-chain settlements panel -->
+      <section class="card onchain-panel">
+        <h2>On-chain settlements <span class="muted">real Arc data, via Circle Gateway API</span></h2>
+        <div class="grid" id="onchain-grid">
+          <div>
+            <span class="label">Buyer address (Arc testnet)</span>
+            <a id="buyer-addr-link" href="#" target="_blank" rel="noopener">loading…</a>
+          </div>
+          <div>
+            <span class="label">Seller address (Arc testnet)</span>
+            <a id="seller-addr-link" href="#" target="_blank" rel="noopener">loading…</a>
+          </div>
+        </div>
+        <div style="margin-top: 12px;">
+          <button id="refresh-onchain" class="primary" style="font-size: 12px; padding: 6px 14px;">Refresh on-chain settlements</button>
+          <span id="onchain-status" class="hint" style="margin-left: 10px;"></span>
+        </div>
+        <div id="onchain-list" style="margin-top: 12px;"></div>
+      </section>
+
+      <!-- Prior sessions -->
+      <section class="card">
+        <h2>History</h2>
+        <div class="history" id="history">
+          <div class="empty-state">No sessions yet. Start one above.</div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const state = {
+        explorer: "https://testnet.arcscan.app",
+        pricePerChunkUsdc: 0.0005,
+        qualityThreshold: 0.6,
+        sellerAddress: null,
+        buyerAddress: null,
+        busy: false,
+      };
+
+      // Demo presets — each pair tells the same story:
+      //   sloppy prompt → quality oracle catches drift/breakage → kill saves the buyer money
+      //   focused prompt → same task, model executes correctly, payments flow to completion
+      //
+      // The text monitor runs THREE layers:
+      //   Layer 1 (Gemini)        — topic drift detection
+      //   Layer 2 (Gemini)        — spec adherence (response uses prompt-stated identifiers)
+      //   Layer 3 (deterministic) — backtick-quoted prompt tokens MUST appear verbatim
+      //
+      // The presets demonstrate each kill mode:
+      //   1️⃣ text-sloppy   → fires Layer 1 (drift)
+      //   2️⃣ text-focused  → all three layers stay green, completion
+      //   3️⃣ text-spec-trap→ fires Layer 2/3 (model defaults to common name, ignores prompt)
+      //   4️⃣ code-sloppy   → fires deterministic CodeMonitor (tsc fails)
+      //   5️⃣ code-focused  → tsc + node --test pass, completion
+      const PRESETS = {
+        "text-sloppy": {
+          useCase: "text",
+          prompt:
+            "Explain how the EIP-712 typed data signing standard works for blockchain payments. Then transition to discussing the philosophical implications of digital signatures in modern legal systems, drawing parallels with handwritten signatures in medieval contract law and reflecting on how nostalgia shapes our perception of trust in cryptographic protocols today.",
+        },
+        "text-focused": {
+          useCase: "text",
+          prompt:
+            "Explain how `EIP-712` typed data signing works. Cover four things in order: (1) the domain separator and its fields, (2) how custom types are encoded into the type hash, (3) how the final message hash is built, (4) what a wallet shows the user before signing. Use `TransferWithAuthorization` as the running example. Reference `signTypedData` from `viem`.",
+        },
+        "text-spec-trap": {
+          useCase: "text",
+          prompt:
+            "Show me how to sign a Circle Gateway nanopayment authorization on Arc testnet. The EIP-712 domain MUST be `GatewayWalletBatched` version `1` (NOT the standard USDC v2 domain). The struct is `TransferWithAuthorization` with field `validBefore` (NOT validUntil) which must be at least 3 days in the future. Use `signTypedData` from `viem`. Show the complete TypeScript snippet, naming each identifier exactly as written here.",
+        },
+        "code-sloppy": {
+          useCase: "code",
+          prompt:
+            "Write a function to compute the median of an array of numbers, with some tests.",
+        },
+        "code-focused": {
+          useCase: "code",
+          prompt:
+            "Write a TypeScript function `export function median(xs: number[]): number` that returns the median of an array of numbers. Use average-of-middle-two for even-length arrays. Throw on empty input. Include node:test cases asserting median([1,2,3]) === 2, median([1,2,3,4]) === 2.5, and that median([]) throws.",
+        },
+      };
+
+      const $ = (id) => document.getElementById(id);
+
+      function el(tag, attrs = {}, ...children) {
+        const node = document.createElement(tag);
+        for (const [k, v] of Object.entries(attrs)) {
+          if (k === "class") node.className = v;
+          else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
+          else if (v !== undefined && v !== null) node.setAttribute(k, v);
+        }
+        for (const c of children) {
+          if (c == null) continue;
+          node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+        }
+        return node;
+      }
+
+      function shortAddr(a) { if (!a || a.length < 12) return a || ""; return a.slice(0, 6) + "…" + a.slice(-4); }
+      function shortTx(t) { if (!t || t.length < 10) return t || ""; return t.slice(0, 8) + "…"; }
+      function fmtUsd(n, digits = 4) { return "$" + Number(n || 0).toFixed(digits); }
+      function fmtTime(ms) {
+        if (!ms) return "—";
+        const d = new Date(ms);
+        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      }
+      function statusBadgeClass(status) {
+        if (status === "completed" || status === "confirmed") return "ok";
+        if (status === "batched") return "info";
+        if (status === "received") return "warn";
+        if (status === "failed") return "bad";
+        return "neutral";
+      }
+
+      async function boot() {
+        try {
+          const r = await fetch("/api/health");
+          const j = await r.json();
+          state.explorer = j.explorer;
+          state.pricePerChunkUsdc = j.pricePerChunkUsdc;
+          state.qualityThreshold = j.qualityThreshold;
+          state.sellerAddress = j.sellerAddress;
+          state.buyerAddress = j.buyerAddress;
+
+          $("status-dot").classList.add(j.sellerReachable ? "ok" : "bad");
+          $("seller-status").textContent = j.sellerReachable ? "ready" : "unreachable";
+          $("composer-hint").textContent =
+            `Buyer ${shortAddr(j.buyerAddress)} → Seller @ ${j.sellerUrl}. ` +
+            `$${j.pricePerChunkUsdc.toFixed(4)} per chunk, ` +
+            `threshold ${j.qualityThreshold}, warmup ${j.warmupChunks}, window ${j.rollingWindow}.`;
+
+          // Populate on-chain links
+          if (j.buyerAddress) {
+            const link = $("buyer-addr-link");
+            link.textContent = j.buyerAddress;
+            link.href = `${j.explorer}/address/${j.buyerAddress}`;
+          }
+          if (j.sellerAddress) {
+            const link = $("seller-addr-link");
+            link.textContent = j.sellerAddress;
+            link.href = `${j.explorer}/address/${j.sellerAddress}`;
+          }
+        } catch (e) {
+          $("seller-status").textContent = "server error";
+          $("status-dot").classList.add("bad");
+        }
+
+        for (const btn of document.querySelectorAll(".presets button")) {
+          btn.addEventListener("click", () => {
+            const p = PRESETS[btn.dataset.preset];
+            if (!p) return;
+            $("prompt").value = p.prompt;
+            document.querySelector(`input[name=usecase][value="${p.useCase}"]`).checked = true;
+          });
+        }
+
+        $("start").addEventListener("click", startSession);
+        $("refresh-onchain").addEventListener("click", refreshOnChain);
+        $("refresh-evidence").addEventListener("click", loadEvidence);
+
+        refreshStatus();
+        loadEvidence();
+        setInterval(refreshStatus, 5000);
+      }
+
+      async function startSession() {
+        const prompt = $("prompt").value.trim();
+        const useCase = document.querySelector('input[name=usecase]:checked').value;
+        $("composer-error").style.display = "none";
+        if (prompt.length < 5) { showError("Prompt is too short."); return; }
+
+        $("start").disabled = true;
+        resetSessionViews();
+        $("current-section").style.display = "block";
+        $("stream-section").style.display = "grid";
+        $("ledger-section").style.display = "block";
+
+        let sessionId;
+        try {
+          const r = await fetch("/api/sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ useCase, prompt }),
+          });
+          if (!r.ok) {
+            const j = await r.json().catch(() => ({}));
+            throw new Error(j.error || `HTTP ${r.status}`);
+          }
+          const j = await r.json();
+          sessionId = j.sessionId;
+        } catch (err) {
+          $("start").disabled = false;
+          showError("Failed to start session: " + err.message);
+          return;
+        }
+
+        openStream(sessionId);
+      }
+
+      function showError(msg) { $("composer-error").style.display = "block"; $("composer-error").textContent = msg; }
+
+      function resetSessionViews() {
+        $("response").textContent = "";
+        $("timeline").innerHTML = "";
+        $("ledger-body").innerHTML = "";
+        $("current-meta").innerHTML = "";
+        $("current-status").className = "badge neutral";
+        $("current-status").textContent = "pending";
+      }
+
+      function openStream(sessionId) {
+        const es = new EventSource(`/api/sessions/${sessionId}/events`);
+        let chunkCount = 0;
+
+        const handlers = {
+          "session-started": (e) => {
+            $("current-meta").innerHTML = "";
+            $("current-meta").appendChild(kv("Session", sessionId.slice(0, 8)));
+            $("current-meta").appendChild(kv("Use case", e.useCase));
+            $("current-meta").appendChild(kv("Buyer", shortAddr(e.buyerAddress)));
+            $("current-meta").appendChild(kv("Seller", e.sellerBaseUrl));
+            $("current-meta").appendChild(kv("Budget", fmtUsd(e.budgetUsdc, 4)));
+            $("current-meta").appendChild(kv("Threshold", e.qualityThreshold.toFixed(2)));
+            $("current-meta").appendChild(kv("Max tokens", String(e.maxTokens)));
+            $("current-meta").appendChild(kv("Prompt", e.prompt, true));
+            $("current-status").className = "badge info";
+            $("current-status").textContent = "running";
+          },
+          "chunk-started": (e) => {
+            const resp = $("response");
+            const marker = document.createElement("span");
+            marker.className = "chunk-marker";
+            marker.textContent = e.chunkIndex === 0 ? "" : `[${e.chunkIndex}]`;
+            resp.appendChild(marker);
+          },
+          "tokens": (e) => {
+            $("response").appendChild(document.createTextNode(e.text));
+            $("response").scrollTop = $("response").scrollHeight;
+          },
+          "chunk-complete": (e) => {
+            chunkCount++;
+            const tbody = $("ledger-body");
+            const transferId = e.transaction || "";
+            const row = el("tr", { "data-transfer-id": transferId },
+              el("td", {}, String(chunkCount)),
+              el("td", {}, `chunk ${e.chunkIndex}`),
+              el("td", { class: "mono" }, fmtUsd(e.priceUsdc, 4)),
+              el("td", { class: "mono", title: transferId }, transferId ? shortTx(transferId) : "(pending)"),
+              el("td", { class: "mono" }, fmtTime(e.ts)),
+              el("td", {},
+                transferId
+                  ? el("button", {
+                      class: "resolve-btn",
+                      "data-id": transferId,
+                      onclick: (evt) => resolveTransfer(evt.target, transferId),
+                    }, "Resolve")
+                  : "",
+              ),
+            );
+            tbody.appendChild(row);
+          },
+          "quality-assessed": (e) => {
+            const threshold = e.threshold ?? state.qualityThreshold;
+            const s = e.report.score;
+            let cls = "good";
+            if (s < 0.4) cls = "bad";
+            else if (s < threshold) cls = "warn";
+            const card = el("div", { class: `assessment ${cls}` },
+              el("div", { class: "a-head" },
+                el("span", { class: "a-chunk" }, `chunk ${e.chunkIndex} · ${e.monitorName}`),
+                el("span", {},
+                  el("span", { class: "a-score" }, s.toFixed(2)),
+                  " ",
+                  el("span", { class: "a-avg" }, `avg ${e.rollingAvg.toFixed(2)} / ${threshold.toFixed(2)}`),
+                ),
+              ),
+              e.report.reasoning
+                ? el("div", { class: "a-reason" }, "↳ " + e.report.reasoning)
+                : null,
+            );
+            $("timeline").appendChild(card);
+            $("timeline").scrollTop = $("timeline").scrollHeight;
+          },
+          "kill-decision": (e) => {
+            const card = el("div", { class: "assessment kill" },
+              el("div", { class: "a-head" },
+                el("span", { class: "a-chunk" }, `☠ KILLED at chunk ${e.chunkIndex}`),
+                el("span", { class: "a-score" }, "STOP"),
+              ),
+              el("div", { class: "a-reason" }, e.reason),
+              el("div", { class: "a-reason" },
+                `Stopped paying after ${fmtUsd(e.spentUsdc)}. ` +
+                `Rolling avg ${e.rollingAvg.toFixed(2)} below threshold ${e.threshold.toFixed(2)}.`
+              ),
+            );
+            $("timeline").appendChild(card);
+            $("timeline").scrollTop = $("timeline").scrollHeight;
+          },
+          "budget-exhausted": () => {
+            $("current-status").className = "badge warn";
+            $("current-status").textContent = "budget exhausted";
+          },
+          "session-complete": (e) => {
+            es.close();
+            $("start").disabled = false;
+            let cls = "ok";
+            if (e.outcome === "killed") cls = "bad";
+            else if (e.outcome === "error" || e.outcome === "budget") cls = "warn";
+            $("current-status").className = `badge ${cls}`;
+            $("current-status").textContent = e.outcome;
+
+            const summary = el("div", { class: "assessment" },
+              el("div", { class: "a-head" },
+                el("span", { class: "a-chunk" }, `Session ${e.outcome}`),
+                el("span", { class: "a-score" }, fmtUsd(e.spentUsdc)),
+              ),
+              el("div", { class: "a-reason" },
+                `${e.chunksCompleted} chunks · ${e.tokensReceived} tokens · ${e.elapsedMs} ms · ` +
+                `would-have ${fmtUsd(e.wouldHaveSpentUsdc)} · saved ${fmtUsd(e.wouldHaveSpentUsdc - e.spentUsdc)}`
+              ),
+              e.errorMessage ? el("div", { class: "a-reason" }, "✗ " + e.errorMessage) : null,
+              e.killReason ? el("div", { class: "a-reason" }, "kill reason: " + e.killReason) : null,
+            );
+            $("timeline").appendChild(summary);
+
+            refreshStatus();
+            // auto-refresh on-chain list after a few seconds — batching may need time
+            setTimeout(refreshOnChain, 3000);
+          },
+        };
+
+        for (const type of Object.keys(handlers)) {
+          es.addEventListener(type, (ev) => {
+            try { handlers[type](JSON.parse(ev.data)); }
+            catch (err) { console.error("parse failed for", type, err); }
+          });
+        }
+        es.addEventListener("done", () => es.close());
+        es.onerror = () => {};
+      }
+
+      function kv(k, v, wide = false) {
+        const wrap = document.createElement("div");
+        wrap.className = "kv";
+        if (wide) wrap.style.gridColumn = "1 / -1";
+        const kEl = document.createElement("div"); kEl.className = "k"; kEl.textContent = k;
+        const vEl = document.createElement("div"); vEl.className = "v"; vEl.textContent = v;
+        wrap.appendChild(kEl); wrap.appendChild(vEl);
+        return wrap;
+      }
+
+      // ================================================================
+      // Resolve a Circle Transfer UUID to its real settlement record
+      // ================================================================
+      // Auto-poll constants for intermediate transfer statuses ("received",
+      // "batched"). Circle's batched-settlement docs commit to off-chain →
+      // on-chain progression but don't publish a contractual cadence, so we
+      // poll modestly. The user always retains the manual "Re-check now"
+      // button for ad-hoc rechecks. 15s × 10 = 2.5 min total auto-poll budget.
+      const POLL_INTERVAL_MS = 15_000;
+      const MAX_POLL_ATTEMPTS = 10;
+
+      async function resolveTransfer(btn, transferId, pollAttempt = 0) {
+        const tr = btn.closest("tr");
+        if (pollAttempt === 0) {
+          btn.disabled = true;
+          btn.textContent = "…";
+        }
+        try {
+          const r = await fetch(`/api/transfers/${encodeURIComponent(transferId)}`);
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+
+          // Mark the row
+          tr.classList.add("resolved");
+          btn.textContent = j.record?.status ?? "ok";
+          btn.disabled = false;
+
+          // Replace any existing detail row
+          const existing = tr.nextElementSibling;
+          if (existing && existing.classList.contains("resolve-details")) existing.remove();
+
+          const detailRow = el("tr", { class: "resolve-details" },
+            el("td", { colspan: "6" }, buildDetailContent(j, transferId, btn, pollAttempt))
+          );
+          tr.parentNode.insertBefore(detailRow, tr.nextSibling);
+
+          // If status is intermediate, schedule the next auto-poll.
+          const status = j.record?.status;
+          if ((status === "received" || status === "batched") && pollAttempt < MAX_POLL_ATTEMPTS) {
+            setTimeout(() => {
+              if (tr.isConnected) {
+                resolveTransfer(btn, transferId, pollAttempt + 1).catch(() => {});
+              }
+            }, POLL_INTERVAL_MS);
+          }
+        } catch (err) {
+          if (pollAttempt === 0) {
+            btn.disabled = false;
+            btn.textContent = "retry";
+            alert("Lookup failed: " + err.message);
+          }
+          // Silent during background polling — don't bug the user with alerts.
+        }
+      }
+
+      function buildDetailContent(resp, transferId, btn, pollAttempt) {
+        const wrap = document.createElement("div");
+        const status = resp.record?.status ?? "unknown";
+
+        const header = document.createElement("div");
+        header.style.marginBottom = "6px";
+        header.appendChild(el("span", { class: `badge ${statusBadgeClass(status)}` }, status));
+        if (resp.cached) header.appendChild(document.createTextNode(" (cached)"));
+        wrap.appendChild(header);
+
+        const grid = document.createElement("div");
+        grid.className = "kv-grid";
+        const pushKv = (k, v) => {
+          grid.appendChild(el("div", { class: "k" }, k));
+          grid.appendChild(el("div", { class: "v" }, v));
+        };
+
+        const r = resp.record || {};
+        if (r.id) pushKv("Transfer ID", r.id);
+        if (r.status) pushKv("Status", r.status);
+        if (r.sendingNetwork) pushKv("Sending network", r.sendingNetwork);
+        if (r.recipientNetwork) pushKv("Recipient network", r.recipientNetwork);
+        if (r.fromAddress) pushKv("From", r.fromAddress);
+        if (r.toAddress) pushKv("To", r.toAddress);
+        if (r.amount) pushKv("Amount (atomic)", r.amount);
+        if (r.createdAt) pushKv("Created", r.createdAt);
+        if (r.updatedAt) pushKv("Updated", r.updatedAt);
+        wrap.appendChild(grid);
+
+        // Status-aware on-chain settlement block. Per Circle's API, the
+        // per-transfer record itself never carries a tx hash regardless of
+        // status — the on-chain hash lives on the batch. So we explain that
+        // honestly and surface the right action for each lifecycle state.
+        const updatedAt = resp.record?.updatedAt;
+        const settle = document.createElement("div");
+        settle.style.marginTop = "10px";
+
+        if (status === "completed" || status === "confirmed") {
+          settle.appendChild(el("strong", { style: "color: var(--ok);" },
+            "✓ Settled on-chain"));
+          if (updatedAt) {
+            settle.appendChild(el("div", { style: "margin-top: 4px;" },
+              `Batch settled at ${new Date(updatedAt).toLocaleString()}.`));
+          }
+          if (state.sellerAddress) {
+            const link = el("a", {
+              href: `${state.explorer}/address/${state.sellerAddress}?tab=token_transfers`,
+              target: "_blank", rel: "noopener",
+              style: "display: inline-block; margin-top: 6px; color: var(--info); font-weight: 500;",
+            }, "View seller's incoming USDC on Arc →");
+            settle.appendChild(link);
+          }
+          settle.appendChild(el("div", { style: "margin-top: 6px; font-size: 11px; color: var(--text-muted);" },
+            "Per Circle's API the per-transfer record doesn't carry the batch's tx hash; the settlement appears on the seller's address page as an inbound USDC transfer around the timestamp above. The On-chain evidence card below also lists every batch settlement."));
+        } else if (status === "received" || status === "batched") {
+          settle.appendChild(el("strong", { style: "color: var(--info);" },
+            status === "received"
+              ? "⏳ Authorization received — awaiting batch"
+              : "⏳ Assigned to batch — awaiting on-chain confirmation"));
+          settle.appendChild(el("div", { style: "margin-top: 4px; font-size: 12px;" },
+            status === "received"
+              ? "Circle has the signed authorization. The next batch will include this transfer."
+              : "Circle has assigned this transfer to a batch. The on-chain settlement should land on Arc shortly."));
+          if (pollAttempt < MAX_POLL_ATTEMPTS) {
+            const remaining = MAX_POLL_ATTEMPTS - pollAttempt;
+            settle.appendChild(el("div", {
+              style: "margin-top: 6px; font-size: 11px; color: var(--info);",
+            }, `Auto-rechecking every ${POLL_INTERVAL_MS / 1000}s (${remaining} attempt${remaining === 1 ? "" : "s"} remaining).`));
+          } else {
+            settle.appendChild(el("div", {
+              style: "margin-top: 6px; font-size: 11px; color: var(--text-muted);",
+            }, "Auto-recheck stopped after 5 minutes. Click Re-check below or Resolve again."));
+          }
+          settle.appendChild(el("div", {
+            style: "margin-top: 4px; font-size: 11px; color: var(--text-muted);",
+          }, "Empirically, prior batches in this demo's history landed every ~15 min during active periods — see Batch settlement events in the On-chain evidence card below."));
+          settle.appendChild(el("button", {
+            class: "resolve-btn",
+            style: "margin-top: 8px;",
+            onclick: () => resolveTransfer(btn, transferId, 0),
+          }, "Re-check now"));
+        } else if (status === "failed") {
+          settle.appendChild(el("strong", { style: "color: var(--bad);" }, "✗ Settlement failed"));
+          settle.appendChild(el("div", { style: "margin-top: 4px; font-size: 12px; color: var(--text-muted);" },
+            "Circle reports this transfer failed. Check the Raw API response below for details."));
+        } else {
+          settle.appendChild(el("div", { style: "font-size: 12px; color: var(--text-muted);" },
+            `Status "${status}" — see Raw API response below.`));
+        }
+        wrap.appendChild(settle);
+
+        // Raw JSON toggle
+        const details = document.createElement("details");
+        details.style.marginTop = "6px";
+        details.appendChild(el("summary", { style: "cursor: pointer; color: var(--text-muted); font-size: 12px;" }, "Raw API response"));
+        details.appendChild(el("pre", {}, JSON.stringify(resp.record, null, 2)));
+        wrap.appendChild(details);
+
+        return wrap;
+      }
+
+      // ================================================================
+      // On-chain settlement list — real transfers landing at seller
+      // ================================================================
+      async function refreshOnChain() {
+        const btn = $("refresh-onchain");
+        const status = $("onchain-status");
+        btn.disabled = true;
+        status.textContent = "fetching from Circle Gateway API…";
+        try {
+          const r = await fetch("/api/transfers-to-seller");
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+          renderOnChain(j);
+          status.textContent = `${j.count} transfers to seller address`;
+        } catch (err) {
+          status.textContent = "error: " + err.message;
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      function renderOnChain(data) {
+        const list = $("onchain-list");
+        list.innerHTML = "";
+        if (!data.transfers || data.transfers.length === 0) {
+          list.appendChild(el("div", { class: "empty-state" },
+            "No transfers landed at the seller address yet. Circle may still be batching — wait a minute and click Refresh."));
+          return;
+        }
+        const table = el("table", { class: "ledger" });
+        const thead = el("thead", {}, el("tr", {},
+          el("th", {}, "#"),
+          el("th", {}, "Status"),
+          el("th", {}, "Amount"),
+          el("th", {}, "Transfer ID"),
+          el("th", {}, "Updated"),
+          el("th", {}, "On-chain tx"),
+        ));
+        table.appendChild(thead);
+        const tbody = el("tbody");
+        data.transfers.forEach((t, i) => {
+          // find any 0x-prefixed 64-hex-char field
+          let onChainHash = null;
+          for (const [k, v] of Object.entries(t)) {
+            if (typeof v === "string" && /^0x[0-9a-fA-F]{64}$/.test(v)) {
+              onChainHash = { key: k, hash: v };
+              break;
+            }
+          }
+          const row = el("tr", {},
+            el("td", {}, String(i + 1)),
+            el("td", {}, el("span", { class: `badge ${statusBadgeClass(t.status)}` }, t.status || "?")),
+            el("td", { class: "mono" }, t.amount || "—"),
+            el("td", { class: "mono", title: t.id }, shortTx(t.id)),
+            el("td", { class: "mono" }, t.updatedAt ? new Date(t.updatedAt).toLocaleTimeString() : "—"),
+            el("td", { class: "mono" },
+              onChainHash
+                ? el("a", { href: `${state.explorer}/tx/${onChainHash.hash}`, target: "_blank", rel: "noopener" }, shortTx(onChainHash.hash))
+                : "—"
+            ),
+          );
+          tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+        list.appendChild(table);
+      }
+
+      // ================================================================
+      // On-chain Evidence card — reads logs/onchain-evidence.json and
+      // logs/verify-report.json via /api/evidence and renders clickable
+      // tx hashes + batch list. This is the demo-friendly proof view.
+      // ================================================================
+      async function loadEvidence() {
+        const status = $("evidence-status");
+        status.textContent = "loading evidence...";
+        try {
+          const r = await fetch("/api/evidence");
+          const j = await r.json();
+          renderEvidence(j);
+          const parts = [];
+          if (j.onchainEvidence) parts.push("onchain-evidence.json");
+          if (j.verifyReport) parts.push("verify-report.json");
+          status.textContent = parts.length
+            ? `loaded ${parts.join(" + ")}`
+            : "no evidence files yet — run produce-evidence and verify-onchain";
+        } catch (err) {
+          status.textContent = "error: " + (err && err.message ? err.message : err);
+        }
+      }
+
+      function renderEvidence(data) {
+        const oe = data.onchainEvidence;
+        const vr = data.verifyReport;
+
+        // ---- Metrics ----
+        if (vr && vr.uniqueUuids != null) {
+          $("ev-paid-count").textContent = String(vr.uniqueUuids);
+          const settled = vr.settlements && vr.settlements.completedTransfers;
+          if (settled != null) {
+            $("ev-paid-hint").textContent = `${settled}/${vr.uniqueUuids} status=completed via Circle Gateway`;
+          }
+        } else {
+          $("ev-paid-count").textContent = "—";
+          $("ev-paid-hint").textContent = "run `npm run verify-onchain`";
+        }
+
+        if (oe && typeof oe.successfulCount === "number") {
+          $("ev-onchain-count").textContent = String(oe.successfulCount);
+          $("ev-onchain-hint").textContent = `${oe.successfulCount} of ${oe.attemptedCount} deposits succeeded`;
+        } else {
+          $("ev-onchain-count").textContent = "—";
+          $("ev-onchain-hint").textContent = "run `npm run produce-evidence`";
+        }
+
+        if (vr && vr.settlements && typeof vr.settlements.estimatedBatches === "number") {
+          $("ev-batch-count").textContent = String(vr.settlements.estimatedBatches);
+          const total = vr.settlements.totalAmountUsdc;
+          if (typeof total === "number") {
+            $("ev-batch-hint").textContent = `${fmtUsd(total)} settled to seller via batch txs`;
+          }
+        } else {
+          $("ev-batch-count").textContent = "—";
+          $("ev-batch-hint").textContent = "run `npm run verify-onchain`";
+        }
+
+        // ---- Direct on-chain Arc tx list ----
+        const txWrap = $("ev-onchain-list-wrap");
+        const buyerLink = $("ev-buyer-explorer-link");
+        txWrap.innerHTML = "";
+        if (oe && Array.isArray(oe.transactions) && oe.transactions.length > 0) {
+          const list = el("div", { class: "evidence-tx-list" });
+          // show last 12 in reverse-chronological order
+          const recent = oe.transactions.slice(-12).reverse();
+          for (const tx of recent) {
+            const row = el("a", {
+              href: tx.explorerTxUrl,
+              target: "_blank",
+              rel: "noopener",
+              class: "evidence-tx-row",
+              title: tx.depositTxHash,
+            },
+              el("span", { class: "ev-tx-index" }, `#${tx.index}`),
+              el("span", { class: "ev-tx-hash" }, shortTx(tx.depositTxHash)),
+              el("span", { class: "ev-tx-time" },
+                tx.ts ? new Date(tx.ts).toLocaleTimeString() : "")
+            );
+            list.appendChild(row);
+          }
+          txWrap.appendChild(list);
+          $("ev-onchain-subtitle").textContent =
+            `most recent 12 of ${oe.transactions.length}`;
+          if (oe.explorerAddressUrl) {
+            buyerLink.href = oe.explorerAddressUrl;
+            buyerLink.style.display = "inline-block";
+          }
+        } else {
+          txWrap.appendChild(el("div", { class: "evidence-empty" },
+            "No direct on-chain evidence yet. Run ",
+            el("code", {}, "npm run produce-evidence"),
+            " to generate 50 real Arc transactions at the buyer EOA."
+          ));
+          $("ev-onchain-subtitle").textContent = "";
+          buyerLink.style.display = "none";
+        }
+
+        // ---- Batch settlement events list ----
+        const batchWrap = $("ev-batches-list-wrap");
+        const gwLink = $("ev-gateway-explorer-link");
+        batchWrap.innerHTML = "";
+        if (vr && vr.settlements && Array.isArray(vr.settlements.batches) && vr.settlements.batches.length > 0) {
+          const list = el("div", { class: "evidence-batch-list" });
+          for (let i = 0; i < vr.settlements.batches.length; i++) {
+            const b = vr.settlements.batches[i];
+            const row = el("div", { class: "evidence-batch-row" },
+              el("span", { class: "ev-batch-index" }, `Batch ${i + 1}`),
+              el("span", {}, `${b.transferCount} transfers`),
+              el("span", { class: "ev-batch-amount" }, fmtUsd(b.totalAmountUsdc)),
+              el("span", { class: "ev-batch-time" },
+                b.updatedAt ? new Date(b.updatedAt).toLocaleString() : "")
+            );
+            list.appendChild(row);
+          }
+          batchWrap.appendChild(list);
+          if (vr.proofPoints && vr.proofPoints.gatewayWalletExplorerUrl) {
+            gwLink.href = vr.proofPoints.gatewayWalletExplorerUrl;
+            gwLink.style.display = "inline-block";
+          }
+        } else {
+          batchWrap.appendChild(el("div", { class: "evidence-empty" },
+            "No batch evidence yet. Run ",
+            el("code", {}, "npm run verify-onchain"),
+            " to resolve UUIDs and group them by Circle's batch settlement timestamps."
+          ));
+          gwLink.style.display = "none";
+        }
+      }
+
+      // ================================================================
+      // Periodic status refresh
+      // ================================================================
+      async function refreshStatus() {
+        try {
+          const r = await fetch("/api/status");
+          const j = await r.json();
+          $("total-sessions").textContent = j.totals.sessions;
+          $("total-txs").textContent = j.totals.transactions;
+          $("total-spent").textContent = fmtUsd(j.totals.spentUsdc);
+          $("total-gemini").textContent =
+            fmtUsd(j.gemini.estimatedUsd) + " / " + fmtUsd(j.gemini.capUsd, 2);
+          // Gateway tile: API-reported buyer balance (cached server-side, ~4s).
+          // Refined-design change 4 — shows the live off-chain → on-chain
+          // timeline as Circle's batcher settles authorizations.
+          if (j.buyerGateway && j.buyerGateway.gatewayAvailableUsdc != null) {
+            $("total-gateway").textContent = fmtUsd(j.buyerGateway.gatewayAvailableUsdc);
+          } else if (j.buyerGateway && j.buyerGateway.error) {
+            $("total-gateway").textContent = "err";
+            $("total-gateway").setAttribute("title", "Balance fetch failed: " + j.buyerGateway.error);
+          } else {
+            $("total-gateway").textContent = "—";
+          }
+          renderHistory(j.sessions);
+        } catch (e) {}
+      }
+
+      function renderHistory(sessions) {
+        const wrap = $("history");
+        if (!sessions || sessions.length === 0) {
+          wrap.innerHTML = '<div class="empty-state">No sessions yet. Start one above.</div>';
+          return;
+        }
+        wrap.innerHTML = "";
+        for (const s of sessions) {
+          const statusBadge =
+            s.outcome === "completed" ? el("span", { class: "badge ok" }, "completed")
+            : s.outcome === "killed" ? el("span", { class: "badge bad" }, "killed")
+            : s.outcome === "error" ? el("span", { class: "badge warn" }, "error")
+            : s.outcome === "budget" ? el("span", { class: "badge warn" }, "budget")
+            : el("span", { class: "badge info" }, "running");
+          const row = el("div", { class: "hsession" },
+            statusBadge,
+            el("div", { class: "hprompt" }, s.prompt),
+            el("div", { class: "hspend" }, s.spentUsdc != null ? fmtUsd(s.spentUsdc) : "—"),
+            el("div", { class: "hspend" }, s.transactions ? `${s.transactions.length} ids` : "—"),
+          );
+          wrap.appendChild(row);
+        }
+      }
+
+      boot();
+    </script>
+  </body>
+</html>

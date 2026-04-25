@@ -11,8 +11,11 @@
     "deposit": "tsx scripts/deposit-to-gateway.ts",
     "check-balances": "tsx scripts/check-balances.ts",
     "verify-onchain": "tsx scripts/verify-onchain.ts",
+    "produce-evidence": "tsx scripts/produce-onchain-evidence.ts",
+    "lookup-transfer": "tsx scripts/lookup-transfer.ts",
     "seller": "tsx server/seller.ts",
-    "demo": "tsx scripts/run-demo.ts"
+    "demo": "tsx scripts/run-demo.ts",
+    "web": "tsx web-server/index.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",

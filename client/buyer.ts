@@ -1,24 +1,22 @@
 // client/buyer.ts
 //
 // The Midstream buyer. One class, one public method: runSession(args).
+// Also exposes transfer-lookup helpers that wrap Circle's Gateway API so
+// the UI can resolve each "payment ID" (UUID) to its real on-chain
+// settlement status after Circle batches.
 //
-// For each chunk in the session:
-//   1. If next chunk would exceed budget → emit budget-exhausted, stop.
-//   2. Call POST /chunk/{useCase} via GatewayClient.pay — SDK signs the
-//      EIP-712 authorization and retries with PAYMENT-SIGNATURE automatically.
-//   3. Append returned text to cumulative output.
-//   4. Run the quality monitor on the cumulative output.
-//   5. Feed the new QualityReport into kill-gate.
-//   6. If kill → emit kill-decision, stop.
-//   7. If Claude says stop_reason=end_turn → natural stop.
-//   8. Otherwise → next chunk.
-//
-// The buyer is a library, not a process. Callers (scripts/run-demo.ts today,
-// web-server later) create a Buyer + a SessionBus, call runSession, and
-// subscribe to the bus for live events. The bus supports replay so a UI can
-// attach mid-session without missing earlier events.
+// See node_modules/@circle-fin/x402-batching/dist/client/index.mjs for the
+// verbatim definitions of GatewayClient.pay(), getTransferById(), and
+// searchTransfers(). The UUIDs that .pay() returns in its `transaction`
+// field are Circle Transfer IDs (not Ethereum tx hashes) extracted from
+// the seller's PAYMENT-RESPONSE header. The on-chain 0x-prefixed tx hash
+// is produced later by Circle's facilitator when it batches multiple
+// authorizations into a single on-chain settlement — resolvable via
+// getTransferById(id) once the transfer moves through
+// received → batched → confirmed → completed.
 
 import { GatewayClient } from "@circle-fin/x402-batching/client";
+import type { Hex } from "viem";
 import type {
   QualityMonitor,
   QualityContext,
@@ -45,9 +43,17 @@ interface ChunkResponse {
   finishReason: string;
 }
 
+/**
+ * Raw Transfer object as returned by Circle Gateway's
+ * GET /v1/x402/transfers/{id} endpoint. The SDK types this as having
+ * `[key: string]: unknown` so additional fields may be present. We
+ * surface the whole object to callers unchanged.
+ */
+export type TransferLookup = Record<string, unknown>;
+
 export class Buyer {
   private readonly client: GatewayClient;
-  private readonly monitor: QualityMonitor;
+  private monitor: QualityMonitor;
 
   constructor(deps: BuyerDeps) {
     this.client = new GatewayClient({
@@ -61,6 +67,11 @@ export class Buyer {
     return this.client.address as `0x${string}`;
   }
 
+  /** Runtime swap for the quality monitor (run-demo.ts + web-server use this). */
+  setMonitor(m: QualityMonitor): void {
+    this.monitor = m;
+  }
+
   /**
    * Ensure Gateway balance is sufficient before starting sessions. If the
    * current available Gateway balance is < 1 USDC, top up by `topUpUsdc`.
@@ -68,11 +79,72 @@ export class Buyer {
    */
   async ensureDeposit(topUpUsdc = "5"): Promise<{ depositTxHash: string } | null> {
     const balances = await this.client.getBalances();
-    // 1 USDC = 1_000_000 atomic.
     if (balances.gateway.available < 1_000_000n) {
       return this.client.deposit(topUpUsdc);
     }
     return null;
+  }
+
+  /**
+   * Unconditionally call GatewayClient.deposit() once. Used by the dashboard's
+   * "Add N on-chain Arc tx (live)" button to produce direct on-chain Arc
+   * transactions visible at the buyer's EOA. Each call produces one or two
+   * on-chain Arc txs (USDC.approve when allowance must be raised, plus
+   * GatewayWallet.deposit), and returns the deposit tx hash.
+   */
+  async forceDeposit(amountUsdc: string): Promise<{ depositTxHash: string }> {
+    return this.client.deposit(amountUsdc);
+  }
+
+  /**
+   * Read the buyer's wallet USDC balance and Gateway balance.
+   *
+   * The wallet balance comes from a direct Arc RPC `balanceOf` read against
+   * the USDC contract. The Gateway balance comes from Circle's official
+   * Gateway API (`POST /v1/balances`). Both are surfaced together so the
+   * dashboard can show the live, API-reported state alongside the
+   * locally-tracked in-flight spend.
+   *
+   * Per Circle's docs (Batched Settlement, balance lifecycle): the
+   * `gateway.available` value drops asynchronously as Circle's batcher
+   * settles signed authorizations on chain.
+   */
+  async getBalances(): ReturnType<GatewayClient["getBalances"]> {
+    return this.client.getBalances();
+  }
+
+  /**
+   * Resolve a Circle Transfer ID (the UUID returned by .pay()) to its full
+   * transfer record. Returns whatever Circle's API returns — including the
+   * settlement transaction hash once the transfer has been batched and
+   * confirmed on-chain.
+   *
+   * Endpoint (from SDK source): GET https://gateway-api-testnet.circle.com/v1/x402/transfers/{id}
+   */
+  async lookupTransfer(transferId: string): Promise<TransferLookup> {
+    return (await this.client.getTransferById(transferId)) as TransferLookup;
+  }
+
+  /**
+   * List transfers matching filter criteria. Defaults to the buyer's chain
+   * (Arc testnet: eip155:5042002). Useful for "show me every settlement
+   * that has reached the seller address on Arc."
+   *
+   * Endpoint (from SDK source): GET https://gateway-api-testnet.circle.com/v1/x402/transfers
+   */
+  async searchTransfers(params: {
+    from?: Hex;
+    to?: Hex;
+    status?: "received" | "batched" | "confirmed" | "completed" | "failed";
+    pageSize?: number;
+    pageAfter?: string;
+    pageBefore?: string;
+  }): Promise<{ transfers: TransferLookup[]; pagination?: unknown }> {
+    const result = await this.client.searchTransfers({
+      ...params,
+      token: "USDC",
+    });
+    return result as { transfers: TransferLookup[]; pagination?: unknown };
   }
 
   async runSession(args: RunSessionArgs): Promise<SessionResult> {
@@ -91,12 +163,6 @@ export class Buyer {
       maxTokens,
     } = args;
 
-    // All quantities used in the finalizer are declared up top so no early
-    // return can hit a TDZ. A previous version used `const` + a hoisted
-    // `buildResult()` function; if the inner catch returned, that reference
-    // threw "Cannot access 'elapsedMs' before initialization" which got
-    // swallowed by the outer catch and caused a ghost second session-complete
-    // event. Keep them all up here.
     const startTime = Date.now();
     const maxChunks = Math.ceil(maxTokens / chunkSizeTokens);
     const wouldHaveSpentUsdc = maxChunks * chunkPriceUsdc;
@@ -126,11 +192,8 @@ export class Buyer {
       sellerBaseUrl,
     });
 
-    // Single try/catch wraps the whole chunk loop. Any error inside — in
-    // .pay(), the quality monitor, etc. — ends the session as `outcome=error`.
     try {
       for (let chunkIndex = 0; chunkIndex < maxChunks; chunkIndex++) {
-        // Rule: budget check before each paid chunk.
         if (spent + chunkPriceUsdc > budgetUsdc + 1e-9) {
           outcome = "budget";
           bus.publish({
@@ -144,9 +207,6 @@ export class Buyer {
 
         bus.publish({ type: "chunk-started", chunkIndex });
 
-        // --- Pay for + receive the chunk ---------------------------------
-        // GatewayClient.pay() does: initial request → receive 402 → sign
-        // EIP-712 authorization → retry with PAYMENT-SIGNATURE → return data.
         const body = JSON.stringify({
           sessionId,
           prompt,
@@ -162,13 +222,13 @@ export class Buyer {
         });
 
         const chunk = payResult.data;
-        const transaction = payResult.transaction;
+        const transferId = payResult.transaction;
 
         cumulativeText += chunk.text;
         tokensReceived += chunk.tokensGenerated;
         spent += chunkPriceUsdc;
         chunksCompleted++;
-        if (transaction) transactions.push(transaction);
+        if (transferId) transactions.push(transferId);
 
         if (chunk.text.length > 0) {
           bus.publish({ type: "tokens", chunkIndex, text: chunk.text });
@@ -178,14 +238,13 @@ export class Buyer {
           chunkIndex,
           tokenCount: chunk.tokensGenerated,
           priceUsdc: chunkPriceUsdc,
-          transaction,
+          transaction: transferId,
         });
 
         const naturalStop =
           chunk.finishReason === "end_turn" ||
           chunk.finishReason === "stop_sequence";
 
-        // --- Quality assessment -----------------------------------------
         const ctx: QualityContext = {
           sessionId,
           prompt,
@@ -209,7 +268,6 @@ export class Buyer {
           monitorName: this.monitor.name,
         });
 
-        // --- Kill gate ---------------------------------------------------
         const decision = evaluateKillGate(qualityHistory, {
           threshold: qualityThreshold,
           warmup: warmupChunks,

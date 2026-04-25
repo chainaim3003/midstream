@@ -122,13 +122,16 @@ export const env = {
 // Enforcement helpers — call these at the entry point of each process that
 // needs specific env vars. This keeps the burden close to the usage and
 // keeps `shared/config.ts` importable from scripts that don't need everything.
+//
+// Note: these used to be typed with `asserts env is typeof env & {...}`, which
+// is invalid TypeScript — `asserts X is Y` requires X to be a function
+// parameter, not a module-level imported const. Call sites already use the
+// `!` non-null operator on env.foo, so removing the assertion typing has no
+// effect on runtime safety — the runtime checks below are what enforce
+// presence.
 // ---------------------------------------------------------------------------
 
-export function requireSellerEnv(): asserts env is typeof env & {
-  sellerPrivateKey: `0x${string}`;
-  sellerAddress: `0x${string}`;
-  anthropicApiKey: string;
-} {
+export function requireSellerEnv(): void {
   if (!env.sellerPrivateKey) bail("SELLER_PRIVATE_KEY");
   if (!env.sellerAddress) bail("SELLER_ADDRESS");
   if (!env.anthropicApiKey) bail("ANTHROPIC_API_KEY");
@@ -141,11 +144,7 @@ export function requireSellerEnv(): asserts env is typeof env & {
   }
 }
 
-export function requireBuyerEnv(): asserts env is typeof env & {
-  buyerPrivateKey: `0x${string}`;
-  buyerAddress: `0x${string}`;
-  geminiApiKey: string;
-} {
+export function requireBuyerEnv(): void {
   if (!env.buyerPrivateKey) bail("BUYER_PRIVATE_KEY");
   if (!env.buyerAddress) bail("BUYER_ADDRESS");
   if (!env.geminiApiKey) bail("GEMINI_API_KEY");

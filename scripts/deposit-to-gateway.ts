@@ -123,7 +123,7 @@ if (balances.gateway.available >= requestedAtomic) {
 
 // --- Step 4: check wallet has enough USDC ---------------------------------
 
-if (balances.wallet.raw < requestedAtomic) {
+if (balances.wallet.balance < requestedAtomic) {
   console.error("");
   console.error("❌ Insufficient USDC in wallet.");
   console.error(`   Have: ${balances.wallet.formatted} USDC`);
