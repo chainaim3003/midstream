@@ -103,9 +103,27 @@ export const env = {
   // Explorer — display-only.
   arcBlockExplorerUrl: opt("ARC_BLOCK_EXPLORER_URL") ?? "https://testnet.arcscan.app",
 
-  // Ports
+  // Ports — used as the default when process.env.PORT is not set (which is
+  // the case for local dev). On Railway / Fly / Render the platform injects
+  // PORT and the entry points (server/seller.ts, web-server/index.ts) bind
+  // to that instead so the public route reaches the running process.
   sellerPort: intOpt("SELLER_PORT", 3000),
   webServerPort: intOpt("WEB_SERVER_PORT", 3001),
+
+  // Public base URL of the seller service. Leave unset for local dev — the
+  // web-server falls back to http://localhost:${sellerPort}. When the seller
+  // and web-server are deployed as two separate services (e.g. on Railway)
+  // this MUST be set on the web-server to the seller's public https URL,
+  // otherwise the buyer library will try (and fail) to reach localhost.
+  sellerBaseUrl: opt("SELLER_BASE_URL"),
+
+  // Shared secret for authenticating the dangerous /api/evidence/produce
+  // endpoint, which spends real testnet USDC by calling GatewayClient.deposit
+  // (capped at 20 deposits per call). Leave unset for local dev — the endpoint
+  // is open. In production set a long random string; clients must pass it via
+  // the X-Demo-Key request header. When this env var is set, requests without
+  // a matching header are rejected with 401.
+  demoKey: opt("DEMO_KEY"),
 
   // Defaults (overridable per-session from the UI)
   pricePerChunkUsdc: numOpt("PRICE_PER_CHUNK_USDC", 0.0005),

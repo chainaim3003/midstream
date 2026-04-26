@@ -26,6 +26,7 @@
 // Nothing is mocked. Every number comes from the real pipeline.
 
 import express from "express";
+import type { Request, Response, NextFunction } from "express";
 import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
@@ -44,7 +45,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PUBLIC_DIR = join(__dirname, "public");
 
-const SELLER_URL = `http://localhost:${env.sellerPort}`;
+// Seller URL resolution:
+//   - In production (Railway / Fly / Render), the seller is a separate
+//     service with its own public https URL. Set SELLER_BASE_URL on the
+//     web-server to that URL.
+//   - For local dev, leave SELLER_BASE_URL unset and we default to the
+//     localhost form using SELLER_PORT.
+//
+// We strip any trailing slash so downstream URL building stays predictable.
+const SELLER_URL = (env.sellerBaseUrl ?? `http://localhost:${env.sellerPort}`).replace(/\/$/, "");
 const GEMINI_MAX_COST_USD = Number(process.env.GEMINI_MAX_COST_USD ?? "1.0");
 
 // ---------------------------------------------------------------------------
@@ -117,6 +126,45 @@ async function getBuyerBalancesCached(): Promise<
     }
     return { data: null, cached: false, ageMs: 0, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Demo-key middleware
+// ---------------------------------------------------------------------------
+//
+// Gates endpoints that spend real money or do irreversible on-chain work.
+// Currently only /api/evidence/produce qualifies — that endpoint calls
+// GatewayClient.deposit() N times (capped at 20 per call) and each deposit
+// is a real on-chain Arc tx that drains testnet USDC from the buyer's EOA
+// into their Gateway balance.
+//
+// Behaviour:
+//   - If env.demoKey is unset (local dev): middleware is a no-op, endpoint
+//     stays open. The same as before this change.
+//   - If env.demoKey is set: requests must include header
+//     `X-Demo-Key: <value>` matching env.demoKey, otherwise 401.
+//
+// We deliberately do NOT gate /api/sessions. Worst case there is bounded
+// (single-tenant busyLock + GEMINI_MAX_COST_USD cap) and gating it would
+// also break the dashboard's primary CTA without any reciprocal change to
+// public/index.html. If you decide to gate it later, the same middleware
+// applies — just add `requireDemoKey` to that route.
+
+function requireDemoKey(req: Request, res: Response, next: NextFunction): void {
+  if (!env.demoKey) {
+    // Local dev: no key configured, endpoint is open.
+    next();
+    return;
+  }
+  const provided = req.header("x-demo-key");
+  if (provided !== env.demoKey) {
+    res.status(401).json({
+      error:
+        "this endpoint is protected; pass the shared secret via the X-Demo-Key header",
+    });
+    return;
+  }
+  next();
 }
 
 // ---------------------------------------------------------------------------
@@ -377,6 +425,12 @@ app.get("/api/evidence", async (_req, res) => {
 // merged with the existing evidence file rather than overwriting it.
 //
 // Hard-capped at 20 deposits per call to keep the demo button responsive.
+//
+// Gated by requireDemoKey: if env.demoKey is set (production), requests
+// must include matching X-Demo-Key header. This stops random visitors to
+// the public demo URL from draining testnet USDC out of the buyer EOA
+// into the buyer's Gateway balance. In local dev (no DEMO_KEY) the
+// endpoint stays open as before.
 // ---------------------------------------------------------------------------
 
 interface OnchainEvidenceTx {
@@ -400,7 +454,7 @@ interface OnchainEvidenceFile {
   firstFailureMessage?: string;
 }
 
-app.post("/api/evidence/produce", async (req, res) => {
+app.post("/api/evidence/produce", requireDemoKey, async (req, res) => {
   const requestedCount = Number(req.query.count ?? 10);
   const count =
     Number.isInteger(requestedCount) && requestedCount > 0
@@ -544,9 +598,14 @@ app.get("/api/status", async (_req, res) => {
 // Start
 // ---------------------------------------------------------------------------
 
-app.listen(env.webServerPort, () => {
+// Cloud platforms (Railway, Fly, Render, Heroku) inject PORT and require
+// the process to bind to it for the public route to reach the container.
+// Locally, PORT is unset and we fall back to env.webServerPort (default 3001).
+const port = Number(process.env.PORT) || env.webServerPort;
+
+app.listen(port, () => {
   console.log("━".repeat(70));
-  console.log(` Midstream dashboard: http://localhost:${env.webServerPort}`);
+  console.log(` Midstream dashboard: http://localhost:${port}`);
   console.log("━".repeat(70));
   console.log(`   buyer address:    ${buyer.address}`);
   console.log(`   seller address:   ${env.sellerAddress ?? "(not set)"}`);
@@ -554,7 +613,8 @@ app.listen(env.webServerPort, () => {
   console.log(`   text monitor:     ${textMonitor.name} (${env.geminiModel})`);
   console.log(`   code monitor:     ${codeMonitor.name}`);
   console.log(`   gemini cost cap:  $${GEMINI_MAX_COST_USD.toFixed(2)} per server lifetime`);
+  console.log(`   demo key auth:    ${env.demoKey ? "ENABLED on /api/evidence/produce" : "disabled (local dev)"}`);
   console.log("━".repeat(70));
-  console.log(`   open: http://localhost:${env.webServerPort}`);
+  console.log(`   open: http://localhost:${port}`);
   console.log("━".repeat(70));
 });

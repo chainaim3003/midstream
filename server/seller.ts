@@ -84,13 +84,18 @@ console.log("━".repeat(70));
 
 // --- Listen --------------------------------------------------------------
 
-app.listen(env.sellerPort, () => {
-  console.log(`🟢 Midstream seller listening on :${env.sellerPort}`);
+// Cloud platforms (Railway, Fly, Render, Heroku) inject PORT and require
+// the process to bind to it for the public route to reach the container.
+// Locally, PORT is unset and we fall back to env.sellerPort (default 3000).
+const port = Number(process.env.PORT) || env.sellerPort;
+
+app.listen(port, () => {
+  console.log(`🟢 Midstream seller listening on :${port}`);
   console.log(`   address:          ${sellerAddress}`);
   console.log(`   price per chunk:  $${env.pricePerChunkUsdc.toFixed(4)} USDC`);
   console.log(`   chunk size:       ${env.chunkSizeTokens} tokens`);
   console.log(`   Anthropic model:  ${env.anthropicModel}`);
   console.log(``);
-  console.log(`   Try:  curl http://localhost:${env.sellerPort}/info`);
+  console.log(`   Try:  curl http://localhost:${port}/info`);
   console.log("━".repeat(70));
 });
