@@ -1,0 +1,38 @@
+# Files NOT to copy into the Docker image.
+# Mirrors .gitignore plus a few build-output excludes.
+
+# Node
+node_modules
+dist
+*.tsbuildinfo
+
+# Env — secrets must come from Railway/Fly env vars, NEVER from a baked-in file
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+
+# Logs from local demo runs
+logs
+
+# Editor/OS junk
+.vscode
+.idea
+*.swp
+.DS_Store
+
+# Caches
+.cache
+
+# Docs / repo metadata that don't affect runtime
+*.md
+LICENSE
+docs
+submission
+
+# Avoid copying the Dockerfile into itself
+Dockerfile
+.dockerignore
