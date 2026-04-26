@@ -6,6 +6,11 @@ Built for the [Agentic Economy on Arc](https://lablab.ai/ai-hackathons/nano-paym
 
 ---
 
+# VIDEO
+https://drive.google.com/file/d/1ansW6ioSTkA3v3assmeFLIkPQpCePslt/view?usp=sharing
+
+
+
 ## The idea in one paragraph
 
 Today, every AI product bills you for compute whether the output is usable or not. Chat subscriptions, per-request APIs, and compute-per-second pricing all commit you before the model has proven anything. Midstream flips this: the seller streams output in 32-token chunks priced at $0.0005 USDC each. Between chunks, the buyer's local quality oracle scores the cumulative output. If the rolling score drops below threshold — topic drift, broken compilation, off-prompt image — the buyer stops signing payment authorizations. The seller, getting no signature, stops generating. Mid-sentence. The buyer pays only for the prefix that passed quality.
